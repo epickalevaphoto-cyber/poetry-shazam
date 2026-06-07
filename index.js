@@ -13,7 +13,7 @@ app.get('/', (req, res) => {
 // ⚠️ ВАЖНО: ЗАМЕНИТЕ ЭТУ ССЫЛКУ НА ВАШ АКТУАЛЬНЫЙ URL ИЗ GOOGLE APPS SCRIPT
 // Откройте в браузере ваш скрипт — он должен показывать {"status":"active"...}
 // Только после этого вставляйте ссылку сюда
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzSNFgXZCDMNoDm9FK_x0vzin5Kke8vL71xqNgBYNUmDotSJEdm6Ho3GvvE0ECQZ7pPQg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzFNmmjqYx9WhN_L8T4IklAAHBPih4eHNXAVSOtwMNq4yI9C5T_4p7QWKYGAysBZzbc/exec";
 
 // Прокси для запросов к Google Apps Script
 app.post('/api/battle', async (req, res) => {
