@@ -245,7 +245,6 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        /* Стили экрана записи */
         .poets-container {
             display: flex;
             flex-direction: column;
@@ -258,12 +257,8 @@
             transition: all 0.3s ease;
             background: rgba(18,18,26,0.6);
         }
-        .poet-card.poet1 {
-            border: 1px solid var(--gold);
-        }
-        .poet-card.poet2 {
-            border: 1px solid var(--purple);
-        }
+        .poet-card.poet1 { border: 1px solid var(--gold); }
+        .poet-card.poet2 { border: 1px solid var(--purple); }
         .poet-header {
             display: flex;
             justify-content: space-between;
@@ -313,6 +308,11 @@
             font-size: 11px;
             cursor: pointer;
             color: var(--gold);
+        }
+        .download-btn {
+            background: rgba(155,81,224,0.15);
+            border: 1px solid var(--purple);
+            color: var(--purple);
         }
         .recorder-center {
             display: flex;
@@ -368,8 +368,9 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-wrap: wrap;
         }
-        .play-btn {
+        .play-btn, .re-recognize-btn {
             background: rgba(212,175,55,0.2);
             border: 1px solid var(--gold);
             border-radius: 20px;
@@ -377,6 +378,11 @@
             font-size: 11px;
             cursor: pointer;
             color: var(--gold);
+        }
+        .re-recognize-btn {
+            background: rgba(155,81,224,0.2);
+            border-color: var(--purple);
+            color: var(--purple);
         }
         .submit-battle-btn {
             width: 100%;
@@ -398,11 +404,10 @@
     <div id="custom-toast" class="toast-notification">📋 Скопировано!</div>
     <div id="loading-overlay" class="loading-overlay">
         <div class="loading-spinner"></div>
-        <div class="loading-text">🤖 YandexGPT анализирует стихи...</div>
+        <div class="loading-text">🤖 Обработка...</div>
     </div>
 
     <div class="phone-wrapper">
-        <!-- ЭКРАН ТУРНИРНОЙ СЕТКИ -->
         <div id="screen-main" class="screen active">
             <div class="app-header">
                 <div class="logo-main">PoetryShazam</div>
@@ -415,35 +420,42 @@
             </div>
         </div>
 
-        <!-- ЭКРАН ЗАПИСИ БАТЛА -->
         <div id="screen-battle" class="screen">
             <div class="back-btn-link" onclick="confirmExitBattle()">← К сетке турнира</div>
             <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 20px;">🎙️ Запись батла</h2>
 
             <div class="poets-container">
-                <!-- Поэт 1 - Золотой -->
                 <div class="poet-card poet1">
                     <div class="poet-header">
                         <input type="text" id="poet1-name" class="poet-name-input" placeholder="Имя Поэта 1">
                         <span class="poet-time" id="poet1-time">⏱️ 00:00</span>
                     </div>
                     <textarea id="poem1-editable" class="poet-textarea" rows="4" placeholder="Введите текст стиха вручную или используйте микрофон"></textarea>
-                    <button class="save-btn" onclick="forceSavePoem(1)">💾 Сохранить текст Поэта 1</button>
+                    <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                        <button class="save-btn" onclick="forceSavePoem(1)">💾 Сохранить текст</button>
+                        <button class="save-btn download-btn" onclick="downloadAudio(1)">📥 Скачать аудио</button>
+                        <button class="re-recognize-btn" onclick="reRecognizeAudio(1)">🎤 Перераспознать аудио</button>
+                    </div>
                     <div id="audio1-control" class="audio-control" style="display:none;">
                         <button class="play-btn" onclick="playAudio(1)">🔊 Прослушать запись</button>
+                        <span style="font-size: 10px; color: #8b796d;">аудио сохранено</span>
                     </div>
                 </div>
 
-                <!-- Поэт 2 - Фиолетовый -->
                 <div class="poet-card poet2">
                     <div class="poet-header">
                         <input type="text" id="poet2-name" class="poet-name-input" placeholder="Имя Поэта 2">
                         <span class="poet-time" id="poet2-time">⏱️ 00:00</span>
                     </div>
                     <textarea id="poem2-editable" class="poet-textarea" rows="4" placeholder="Введите текст стиха вручную или используйте микрофон"></textarea>
-                    <button class="save-btn" onclick="forceSavePoem(2)">💾 Сохранить текст Поэта 2</button>
+                    <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                        <button class="save-btn" onclick="forceSavePoem(2)">💾 Сохранить текст</button>
+                        <button class="save-btn download-btn" onclick="downloadAudio(2)">📥 Скачать аудио</button>
+                        <button class="re-recognize-btn" onclick="reRecognizeAudio(2)">🎤 Перераспознать аудио</button>
+                    </div>
                     <div id="audio2-control" class="audio-control" style="display:none;">
                         <button class="play-btn" onclick="playAudio(2)">🔊 Прослушать запись</button>
+                        <span style="font-size: 10px; color: #8b796d;">аудио сохранено</span>
                     </div>
                 </div>
             </div>
@@ -455,13 +467,12 @@
                         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
                     </svg>
                 </div>
-                <div class="record-hint" id="recording-hint">🎤 Нажмите на микрофон для записи (или введите текст вручную)</div>
+                <div class="record-hint" id="recording-hint">🎤 Нажмите на микрофон для записи</div>
             </div>
 
             <button id="submit-battle-btn" class="submit-battle-btn">🔥 ОТПРАВИТЬ НА ОЦЕНКУ</button>
         </div>
 
-        <!-- ЭКРАН ПОДРОБНОГО РАЗБОРА (без изменений) -->
         <div id="screen-details" class="screen">
             <div class="back-btn-link" onclick="showScreen('screen-main')">← В главное меню</div>
             <h2 id="details-main-title" style="font-size: 20px;">Анализ батла №1</h2>
@@ -533,6 +544,7 @@
         let audioChunks = [];
         let audioStore = { 1: null, 2: null };
         let audioUrls = { 1: null, 2: null };
+        let audioBlobs = { 1: null, 2: null };
 
         const tournamentBattles = {};
         for (let i = 1; i <= 10; i++) {
@@ -613,6 +625,7 @@
                 mediaRecorder.onstop = () => {
                     const blob = new Blob(audioChunks, { type: 'audio/webm' });
                     audioStore[currentRecordingPoet] = blob;
+                    audioBlobs[currentRecordingPoet] = blob;
                     if (audioUrls[currentRecordingPoet]) URL.revokeObjectURL(audioUrls[currentRecordingPoet]);
                     audioUrls[currentRecordingPoet] = URL.createObjectURL(blob);
                     const controlDiv = document.getElementById(`audio${currentRecordingPoet}-control`);
@@ -636,6 +649,63 @@
                 new Audio(audioUrls[poetNum]).play();
             } else {
                 alert("Аудио не найдено");
+            }
+        }
+
+        function downloadAudio(poetNum) {
+            if (audioBlobs[poetNum]) {
+                const url = URL.createObjectURL(audioBlobs[poetNum]);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `poet${poetNum}_battle${currentBattleId}.webm`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast(`📥 Аудио Поэта ${poetNum} скачано`);
+            } else {
+                alert("Нет сохранённого аудио");
+            }
+        }
+
+        async function reRecognizeAudio(poetNum) {
+            if (!audioBlobs[poetNum]) {
+                alert("Нет аудиозаписи для распознавания");
+                return;
+            }
+            
+            showLoading(true);
+            showToast(`🎤 Отправка аудио Поэта ${poetNum} на распознавание...`);
+            
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlobs[poetNum], `poet${poetNum}.webm`);
+                formData.append('poetNum', poetNum);
+                
+                const response = await fetch('/api/recognize', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const battle = tournamentBattles[currentBattleId];
+                    if (poetNum === 1) {
+                        battle.p1Text = result.text;
+                        document.getElementById('poem1-editable').value = result.text;
+                    } else {
+                        battle.p2Text = result.text;
+                        document.getElementById('poem2-editable').value = result.text;
+                    }
+                    saveTournamentData();
+                    showToast(`✅ Распознано: ${result.text.substring(0, 50)}...`);
+                } else {
+                    throw new Error(result.error || "Ошибка распознавания");
+                }
+            } catch(err) {
+                console.error("Ошибка:", err);
+                alert("❌ Ошибка распознавания: " + err.message);
+            } finally {
+                showLoading(false);
             }
         }
 
@@ -732,13 +802,12 @@
         async function submitBattle() {
             const battle = tournamentBattles[currentBattleId];
             
-            // Проверяем, что текст сохранён
             if (!battle.p1Text || battle.p1Text.length < 10) {
-                alert(`⚠️ У Поэта 1 слишком короткий текст (${battle.p1Text?.length || 0} символов). Введите или сохраните текст через кнопку "Сохранить".`);
+                alert(`⚠️ У Поэта 1 слишком короткий текст (${battle.p1Text?.length || 0} символов). Введите или сохраните текст.`);
                 return;
             }
             if (!battle.p2Text || battle.p2Text.length < 10) {
-                alert(`⚠️ У Поэта 2 слишком короткий текст (${battle.p2Text?.length || 0} символов). Введите или сохраните текст через кнопку "Сохранить".`);
+                alert(`⚠️ У Поэта 2 слишком короткий текст (${battle.p2Text?.length || 0} символов). Введите или сохраните текст.`);
                 return;
             }
             
@@ -896,6 +965,8 @@
                         p1Audio: null, p2Audio: null
                     };
                 }
+                audioBlobs = { 1: null, 2: null };
+                audioUrls = { 1: null, 2: null };
                 saveTournamentData();
                 renderTournamentGrid();
                 showScreen('screen-main');
@@ -926,7 +997,6 @@
             loadTournamentData();
             initSpeechRecognition();
             
-            // Кнопка отправки батла
             document.getElementById('submit-battle-btn').addEventListener('click', submitBattle);
             
             renderTournamentGrid();
@@ -945,7 +1015,7 @@
                     hintElem.style.color = "#ff4a4a";
                     await startContinuousRecording();
                 } else {
-                    const { transcript, seconds } = await stopContinuousRecording();
+                    await stopContinuousRecording();
                     if(currentRecordingPoet === 1) {
                         currentRecordingPoet = 2;
                         recordBtn.classList.remove('recording');
@@ -953,10 +1023,9 @@
                         hintElem.style.color = "var(--text-muted)";
                         saveTournamentData();
                     } else {
-                        // После записи обоих поэтов ничего не делаем, только сохраняем
                         currentRecordingPoet = 1;
                         recordBtn.classList.remove('recording');
-                        hintElem.innerHTML = "🎤 Нажмите на микрофон для записи (или введите текст вручную)";
+                        hintElem.innerHTML = "🎤 Нажмите на микрофон для записи";
                         hintElem.style.color = "var(--text-muted)";
                         saveTournamentData();
                         showToast("✅ Оба текста сохранены. Нажмите 'ОТПРАВИТЬ НА ОЦЕНКУ'");
