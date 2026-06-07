@@ -171,37 +171,34 @@
             border-color: #d4af37;
         }
 
-        .button-group {
+        .icon-group {
             display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 12px;
+            gap: 16px;
+            align-items: center;
+            margin: 12px 0 8px;
         }
-        .icon-btn {
+        .icon-action {
             background: rgba(255,255,255,0.05);
             border: none;
-            border-radius: 30px;
-            padding: 8px 16px;
-            font-size: 12px;
+            border-radius: 40px;
+            padding: 8px;
+            width: 36px;
+            height: 36px;
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
             cursor: pointer;
             transition: all 0.2s;
-            color: #ccc;
+            color: #8b8b8b;
+            font-size: 18px;
         }
-        .icon-btn:hover {
+        .icon-action:hover {
             background: rgba(255,255,255,0.12);
-            transform: translateY(-1px);
+            transform: translateY(-2px);
         }
-        .icon-btn.gold {
-            background: rgba(212,175,55,0.15);
-            color: #d4af37;
-        }
-        .icon-btn.purple {
-            background: rgba(155,81,224,0.15);
-            color: #9b51e0;
-        }
+        .icon-action.gold { color: #d4af37; }
+        .icon-action.purple { color: #9b51e0; }
+        .icon-action.active { background: rgba(212,175,55,0.2); }
 
         .audio-control {
             display: flex;
@@ -264,24 +261,25 @@
             margin-top: 8px;
         }
 
-        .submit-btn {
+        .submit-minimal {
             width: 100%;
-            background: linear-gradient(135deg, #d4af37, #b8941e);
-            border: none;
+            background: transparent;
+            border: 1.5px solid rgba(212,175,55,0.4);
             border-radius: 40px;
-            padding: 16px;
-            font-size: 16px;
-            font-weight: 700;
-            text-transform: uppercase;
+            padding: 14px;
+            font-size: 14px;
+            font-weight: 500;
             letter-spacing: 2px;
-            color: #12121a;
+            color: #d4af37;
             cursor: pointer;
-            margin-top: 20px;
             transition: all 0.2s;
+            margin-top: 20px;
+            text-transform: uppercase;
         }
-        .submit-btn:hover {
+        .submit-minimal:hover {
+            background: rgba(212,175,55,0.1);
+            border-color: #d4af37;
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(212,175,55,0.3);
         }
 
         .results-table {
@@ -301,6 +299,7 @@
             color: #d4af37;
             border-bottom-color: #d4af37;
         }
+        .col-center { text-align: center; }
 
         .loading-overlay {
             position: fixed;
@@ -379,7 +378,7 @@
                 <div id="timer-display" class="timer-display">00:00</div>
             </div>
 
-            <button id="submit-battle-btn" class="submit-btn">🔥 ОТПРАВИТЬ НА ОЦЕНКУ</button>
+            <button id="submit-battle-btn" class="submit-minimal">✧ ОТПРАВИТЬ НА ОЦЕНКУ ✧</button>
         </div>
 
         <!-- Экран результатов -->
@@ -388,7 +387,7 @@
             <h2 id="details-title" style="font-size: 22px;">Анализ батла</h2>
             <div id="details-subtitle" style="color: #8b8b8b; margin-bottom: 20px;"></div>
             <div id="details-content"></div>
-            <button class="submit-btn" onclick="showScreen('screen-main')" style="margin-top: 20px;">Закрыть</button>
+            <button class="submit-minimal" onclick="showScreen('screen-main')" style="margin-top: 20px;">✧ ЗАКРЫТЬ ✧</button>
         </div>
     </div>
 
@@ -429,7 +428,6 @@
             };
         }
 
-        // Загрузка/сохранение в localStorage
         function loadTournamentData() {
             const saved = localStorage.getItem('poetryShazamTournament');
             if (saved) {
@@ -456,7 +454,6 @@
             localStorage.setItem('poetryShazamTournament', JSON.stringify(dataToSave));
         }
 
-        // Web Speech API
         function initSpeechRecognition() {
             if (!('webkitSpeechRecognition' in window)) {
                 alert("❌ Ваш браузер не поддерживает распознавание речи. Используйте Chrome.");
@@ -488,7 +485,6 @@
             return true;
         }
 
-        // Аудиозапись
         async function startAudioRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -774,10 +770,10 @@
                         <span class="poet-time" id="poet1-time">${battle.p1Time || '00:00'}</span>
                     </div>
                     <textarea id="poem1-editable" class="poem-textarea" placeholder="Введите текст стиха вручную или используйте микрофон">${battle.p1Text || ''}</textarea>
-                    <div class="button-group">
-                        <button class="icon-btn gold" onclick="forceSavePoem(1)">💾 Сохранить</button>
-                        <button class="icon-btn gold" onclick="downloadAudio(1)">📥 Скачать аудио</button>
-                        <button class="icon-btn gold" onclick="reRecognizeAudio(1)">🎤 Перераспознать</button>
+                    <div class="icon-group">
+                        <button class="icon-action gold" onclick="forceSavePoem(1)" title="Сохранить текст">💾</button>
+                        <button class="icon-action gold" onclick="downloadAudio(1)" title="Скачать аудио">📥</button>
+                        <button class="icon-action gold" onclick="reRecognizeAudio(1)" title="Перераспознать аудио">🎤</button>
                     </div>
                     <div id="audio1-control" class="audio-control" style="display:${audioBlobs[1] ? 'flex' : 'none'}">
                         <button class="play-btn" onclick="playAudio(1)">🔊 Прослушать</button>
@@ -789,10 +785,10 @@
                         <span class="poet-time" id="poet2-time">${battle.p2Time || '00:00'}</span>
                     </div>
                     <textarea id="poem2-editable" class="poem-textarea" placeholder="Введите текст стиха вручную или используйте микрофон">${battle.p2Text || ''}</textarea>
-                    <div class="button-group">
-                        <button class="icon-btn purple" onclick="forceSavePoem(2)">💾 Сохранить</button>
-                        <button class="icon-btn purple" onclick="downloadAudio(2)">📥 Скачать аудио</button>
-                        <button class="icon-btn purple" onclick="reRecognizeAudio(2)">🎤 Перераспознать</button>
+                    <div class="icon-group">
+                        <button class="icon-action purple" onclick="forceSavePoem(2)" title="Сохранить текст">💾</button>
+                        <button class="icon-action purple" onclick="downloadAudio(2)" title="Скачать аудио">📥</button>
+                        <button class="icon-action purple" onclick="reRecognizeAudio(2)" title="Перераспознать аудио">🎤</button>
                     </div>
                     <div id="audio2-control" class="audio-control" style="display:${audioBlobs[2] ? 'flex' : 'none'}">
                         <button class="play-btn" onclick="playAudio(2)">🔊 Прослушать</button>
