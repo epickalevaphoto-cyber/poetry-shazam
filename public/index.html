@@ -118,10 +118,6 @@
         }
         .poet-card[data-poet="1"] { border-left: 4px solid #d4af37; }
         .poet-card[data-poet="2"] { border-left: 4px solid #9b51e0; }
-        .poet-card.recording {
-            background: linear-gradient(135deg, rgba(212,175,55,0.1), rgba(15,15,22,0.9));
-            transform: scale(1.01);
-        }
 
         .poet-header {
             display: flex;
@@ -198,7 +194,6 @@
         }
         .icon-action.gold { color: #d4af37; }
         .icon-action.purple { color: #9b51e0; }
-        .icon-action.active { background: rgba(212,175,55,0.2); }
 
         .audio-control {
             display: flex;
@@ -349,7 +344,6 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Экран турнирной сетки -->
         <div id="screen-main" class="screen active">
             <div class="header">
                 <div class="logo">POETRYSHAZAM</div>
@@ -361,7 +355,6 @@
             </div>
         </div>
 
-        <!-- Экран записи батла -->
         <div id="screen-battle" class="screen">
             <div class="back-link" onclick="confirmExitBattle()">← К сетке турнира</div>
             <h2 style="font-size: 22px; margin-bottom: 20px;">🎤 Запись батла</h2>
@@ -381,7 +374,6 @@
             <button id="submit-battle-btn" class="submit-minimal">✧ ОТПРАВИТЬ НА ОЦЕНКУ ✧</button>
         </div>
 
-        <!-- Экран результатов -->
         <div id="screen-details" class="screen">
             <div class="back-link" onclick="showScreen('screen-main')">← В главное меню</div>
             <h2 id="details-title" style="font-size: 22px;">Анализ батла</h2>
@@ -398,7 +390,6 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        // ========== НАСТРОЙКИ ==========
         const SHEETY_API_URL = "/api/battle";
         
         let currentBattleId = 1;
@@ -415,7 +406,6 @@
         let audioBlobs = { 1: null, 2: null };
         let audioUrls = { 1: null, 2: null };
 
-        // Турнирная таблица
         const tournamentBattles = {};
         for (let i = 1; i <= 10; i++) {
             tournamentBattles[i] = {
@@ -479,9 +469,12 @@
             
             recognition.onerror = (event) => {
                 if (event.error === 'no-speech') return;
-                if (isRecording) setTimeout(() => { if(isRecording) recognition.start(); }, 300);
+                console.log("Recognition error:", event.error);
             };
-            recognition.onend = () => { if(isRecording) setTimeout(() => recognition.start(), 200); };
+            
+            recognition.onend = () => { 
+                if(isRecording) setTimeout(() => recognition.start(), 200);
+            };
             return true;
         }
 
@@ -490,49 +483,87 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
-                mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunks.push(event.data); };
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
                 mediaRecorder.onstop = () => {
+                    console.log("Создание аудио blob, chunks:", audioChunks.length);
                     const blob = new Blob(audioChunks, { type: 'audio/webm' });
                     audioBlobs[currentRecordingPoet] = blob;
                     if (audioUrls[currentRecordingPoet]) URL.revokeObjectURL(audioUrls[currentRecordingPoet]);
                     audioUrls[currentRecordingPoet] = URL.createObjectURL(blob);
+                    
                     const controlDiv = document.getElementById(`audio${currentRecordingPoet}-control`);
                     if (controlDiv) controlDiv.style.display = 'flex';
+                    
                     stream.getTracks().forEach(track => track.stop());
                 };
+                
                 mediaRecorder.start(1000);
                 return true;
             } catch(err) {
                 console.error("Аудио ошибка:", err);
+                alert("❌ Нет доступа к микрофону. Разрешите доступ в настройках браузера.");
                 return false;
             }
         }
 
         function stopAudioRecording() {
-            if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
         }
 
         async function startContinuousRecording() {
             if (!recognition && !initSpeechRecognition()) return false;
+            
             isRecording = true;
             lastRecognizedText = "";
             currentTranscript = "";
+            
             const poemField = currentRecordingPoet === 1 ? document.getElementById(`poem1-editable`) : document.getElementById(`poem2-editable`);
             if (poemField) poemField.value = "";
-            await startAudioRecording();
-            try { recognition.start(); startTimer(); return true; }
-            catch(e) { alert("Ошибка микрофона"); return false; }
+            
+            const audioStarted = await startAudioRecording();
+            if (!audioStarted) {
+                isRecording = false;
+                return false;
+            }
+            
+            try { 
+                recognition.start(); 
+                startTimer(); 
+                return true;
+            } catch(e) { 
+                console.error("Ошибка распознавания:", e);
+                return false; 
+            }
         }
 
         async function stopContinuousRecording() {
+            console.log("Остановка записи...");
             isRecording = false;
-            if (recognition) try { recognition.stop(); } catch(e) {}
-            stopAudioRecording();
+            
+            if (recognition) {
+                try { recognition.stop(); } catch(e) {}
+            }
+            
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            
             const seconds = stopTimer();
             document.getElementById('record-trigger').classList.remove('recording');
-            await new Promise(r => setTimeout(r, 300));
+            
+            await new Promise(r => setTimeout(r, 500));
+            
             const battle = tournamentBattles[currentBattleId];
             const finalText = currentTranscript.trim();
+            
             if (currentRecordingPoet === 1) {
                 battle.p1Text = finalText;
                 battle.p1Time = formatTime(seconds);
@@ -542,8 +573,10 @@
                 battle.p2Time = formatTime(seconds);
                 document.getElementById(`poet2-time`).innerText = formatTime(seconds);
             }
+            
             saveTournamentData();
             showToast(`✅ Текст сохранён (${finalText.length} симв.)`);
+            
             return { transcript: finalText, seconds: seconds };
         }
 
@@ -589,7 +622,7 @@
                 a.download = `poet${poetNum}_battle${currentBattleId}.webm`;
                 a.click();
                 URL.revokeObjectURL(url);
-                showToast(`📥 Аудио Поэта ${poetNum} скачано`);
+                showToast(`📥 Аудио скачано`);
             } else {
                 alert("Нет аудиозаписи");
             }
@@ -619,7 +652,7 @@
                         document.getElementById('poem2-editable').value = result.text;
                     }
                     saveTournamentData();
-                    showToast(`✅ Распознано: ${result.text.substring(0, 50)}...`);
+                    showToast(`✅ Текст обновлён`);
                 } else {
                     throw new Error(result.error || "Ошибка");
                 }
@@ -631,12 +664,16 @@
         }
 
         function playAudio(poetNum) {
-            if (audioUrls[poetNum]) new Audio(audioUrls[poetNum]).play();
-            else alert("Аудио не найдено");
+            if (audioUrls[poetNum]) {
+                new Audio(audioUrls[poetNum]).play();
+            } else {
+                alert("Аудио не найдено");
+            }
         }
 
         async function submitBattle() {
             const battle = tournamentBattles[currentBattleId];
+            
             if (!battle.p1Text || battle.p1Text.length < 10) {
                 alert(`⚠️ У Поэта 1 слишком короткий текст (${battle.p1Text?.length || 0} симв.)`);
                 return;
@@ -645,6 +682,7 @@
                 alert(`⚠️ У Поэта 2 слишком короткий текст (${battle.p2Text?.length || 0} симв.)`);
                 return;
             }
+            
             showLoading(true);
             try {
                 const response = await fetch(SHEETY_API_URL, {
@@ -661,6 +699,7 @@
                     })
                 });
                 const result = await response.json();
+                
                 if(result.status === "success") {
                     battle.p1Content = parseFloat(result.p1Content);
                     battle.p1Delivery = parseFloat(result.p1Delivery);
@@ -671,9 +710,11 @@
                     battle.p2Critique = result.p2Critique;
                     battle.rawDetails = result.rawDetails;
                     battle.completed = true;
+                    
                     saveTournamentData();
                     renderTournamentGrid();
                     openDetailsScreen(battle);
+                    
                     if(currentBattleId < 10) {
                         currentBattleId++;
                         currentRecordingPoet = 1;
@@ -682,15 +723,16 @@
                     } else showToast("🏆 Турнир завершен!");
                     showToast("✅ Батл завершен!");
                 } else throw new Error(result.message);
-            } catch(err) { alert("❌ Ошибка: " + err.message); }
-            finally { showLoading(false); }
+            } catch(err) { 
+                alert("❌ Ошибка: " + err.message); 
+            } finally { 
+                showLoading(false); 
+            }
         }
 
         function openDetailsScreen(battle) {
             document.getElementById('details-title').innerText = `Анализ батла №${battle.id}`;
             document.getElementById('details-subtitle').innerText = `${battle.p1Name} VS ${battle.p2Name}`;
-            const avg1 = ((battle.p1Content + battle.p1Delivery)/2).toFixed(1);
-            const avg2 = ((battle.p2Content + battle.p2Delivery)/2).toFixed(1);
             const details = battle.rawDetails || {};
             document.getElementById('details-content').innerHTML = `
                 <div class="results-table">
@@ -700,17 +742,7 @@
                         <div class="col-center">${battle.p2Name}</div>
                     </div>
                     <div class="criteria-row"><div>📝 Содержание</div><div class="col-center">${battle.p1Content}/5</div><div class="col-center">${battle.p2Content}/5</div></div>
-                    <div class="sub-criteria-list" style="padding-left:20px; font-size:12px;">
-                        <div>• Рифмы: ${details.p1Rhyme || 0}/5 VS ${details.p2Rhyme || 0}/5</div>
-                        <div>• Образность: ${details.p1Imagery || 0}/5 VS ${details.p2Imagery || 0}/5</div>
-                        <div>• Смысл: ${details.p1Meaning || 0}/5 VS ${details.p2Meaning || 0}/5</div>
-                    </div>
                     <div class="criteria-row"><div>🎙️ Подача</div><div class="col-center">${battle.p1Delivery}/5</div><div class="col-center">${battle.p2Delivery}/5</div></div>
-                    <div class="sub-criteria-list" style="padding-left:20px; font-size:12px;">
-                        <div>• Дикция: ${details.p1Diction || 0}/5 VS ${details.p2Diction || 0}/5</div>
-                        <div>• Ритм: ${details.p1Rhythm || 0}/5 VS ${details.p2Rhythm || 0}/5</div>
-                        <div>• Эмоции: ${details.p1Expression || 0}/5 VS ${details.p2Expression || 0}/5</div>
-                    </div>
                     <div class="criteria-row"><div>⏱️ Время</div><div class="col-center">${battle.p1Time}</div><div class="col-center">${battle.p2Time}</div></div>
                 </div>
                 <div style="background:rgba(212,175,55,0.1); border-radius:20px; padding:16px; margin-top:16px;">
@@ -824,6 +856,8 @@
                         totalVerdict: "", p1Critique: "", p2Critique: "", rawDetails: null
                     };
                 }
+                audioBlobs = { 1: null, 2: null };
+                audioUrls = { 1: null, 2: null };
                 saveTournamentData();
                 renderTournamentGrid();
                 showScreen('screen-main');
@@ -852,7 +886,11 @@
                     if(currentRecordingPoet === 2) battle.p2Name = document.getElementById('poet2-name').value.trim() || battle.p2Name;
                     recordBtn.classList.add('recording');
                     hintElem.innerHTML = "🔴 ИДЁТ ЗАПИСЬ... Нажмите ещё раз для остановки";
-                    await startContinuousRecording();
+                    const started = await startContinuousRecording();
+                    if (!started) {
+                        recordBtn.classList.remove('recording');
+                        hintElem.innerHTML = "❌ Ошибка микрофона. Проверьте разрешения.";
+                    }
                 } else {
                     await stopContinuousRecording();
                     if(currentRecordingPoet === 1) {
@@ -873,4 +911,4 @@
         });
     </script>
 </body>
-</html>
+    </html>
