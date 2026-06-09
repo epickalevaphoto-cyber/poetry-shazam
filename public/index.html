@@ -335,11 +335,17 @@
             justify-content: space-between;
             align-items: center;
         }
+
+        .recognition-status {
+            font-size: 11px;
+            color: #9b51e0;
+            margin-top: 5px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Экран турнирной сетки -->
         <div id="tournamentScreen">
             <div class="tournament-header">
                 <div class="logo">POETRYSHAZAM</div>
@@ -352,17 +358,15 @@
             </div>
         </div>
 
-        <!-- Экран батла -->
         <div id="battleScreen" class="screen">
             <div class="back-btn" onclick="exitBattle()">← К ТУРНИРУ</div>
             
-            <!-- Поэт 1 -->
             <div class="poet-block poet-1">
                 <div class="flex-between">
                     <input type="text" id="poet1Name" class="poet-name-input" placeholder="Имя поэта 1">
                     <span class="poet-time" id="poet1Time">00:00</span>
                 </div>
-                <textarea id="poet1Text" class="poem-text" placeholder="Текст появится автоматически после записи или введите вручную"></textarea>
+                <textarea id="poet1Text" class="poem-text" placeholder="Текст появится автоматически после записи"></textarea>
                 <div class="button-group">
                     <button class="small-btn" onclick="downloadAudio(1)">📥 Скачать аудио</button>
                     <button class="small-btn" onclick="playAudio(1)">▶ Прослушать</button>
@@ -370,13 +374,12 @@
                 <div id="audio1Info" style="display: none; font-size: 11px; color: #2ecc71; margin-top: 8px;">✅ Аудио записано</div>
             </div>
 
-            <!-- Поэт 2 -->
             <div class="poet-block poet-2">
                 <div class="flex-between">
                     <input type="text" id="poet2Name" class="poet-name-input" placeholder="Имя поэта 2">
                     <span class="poet-time" id="poet2Time">00:00</span>
                 </div>
-                <textarea id="poet2Text" class="poem-text" placeholder="Текст появится автоматически после записи или введите вручную"></textarea>
+                <textarea id="poet2Text" class="poem-text" placeholder="Текст появится автоматически после записи"></textarea>
                 <div class="button-group">
                     <button class="small-btn" onclick="downloadAudio(2)">📥 Скачать аудио</button>
                     <button class="small-btn" onclick="playAudio(2)">▶ Прослушать</button>
@@ -384,7 +387,6 @@
                 <div id="audio2Info" style="display: none; font-size: 11px; color: #2ecc71; margin-top: 8px;">✅ Аудио записано</div>
             </div>
 
-            <!-- Микрофон -->
             <div class="mic-area">
                 <div class="mic-button" id="micBtn">
                     <svg viewBox="0 0 24 24">
@@ -393,12 +395,12 @@
                 </div>
                 <div class="timer" id="timer">00:00</div>
                 <div class="mic-hint" id="micHint">🎤 Нажмите для записи Поэта 1</div>
+                <div class="recognition-status" id="recognitionStatus"></div>
             </div>
 
             <button class="submit-btn" id="submitBtn">✧ ОТПРАВИТЬ НА ОЦЕНКУ ✧</button>
         </div>
 
-        <!-- Экран результатов -->
         <div id="resultsScreen" class="screen">
             <div class="back-btn" onclick="backToTournament()">← К ТУРНИРУ</div>
             <h2 id="resultsTitle">Анализ батла</h2>
@@ -413,7 +415,7 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // ============ ДАННЫЕ ============
+        // ДАННЫЕ
         let tournament = [];
         let currentBattleId = 0;
         let currentPoet = 1;
@@ -432,7 +434,7 @@
         let audioUrls = { 1: null, 2: null };
         let mediaStream = null;
         
-        // ============ ИНИЦИАЛИЗАЦИЯ ============
+        // ИНИЦИАЛИЗАЦИЯ
         function initTournament() {
             const saved = localStorage.getItem('poetryTournament');
             if (saved) {
@@ -465,13 +467,9 @@
         }
         
         function saveTournament() {
-            const toSave = tournament.map(b => ({
-                ...b
-            }));
-            localStorage.setItem('poetryTournament', JSON.stringify(toSave));
+            localStorage.setItem('poetryTournament', JSON.stringify(tournament));
         }
         
-        // ============ РЕНДЕР ТУРНИРА ============
         function renderTournament() {
             const container = document.getElementById('battlesList');
             if (!container) return;
@@ -510,7 +508,6 @@
             });
         }
         
-        // ============ ОТКРЫТЬ БАТЛ ============
         function openBattle(battleId) {
             currentBattleId = battleId;
             const battle = tournament[battleId];
@@ -527,89 +524,99 @@
             
             currentPoet = 1;
             document.getElementById('micHint').innerHTML = "🎤 Нажмите для записи Поэта 1";
+            document.getElementById('recognitionStatus').innerHTML = '';
             
             document.getElementById('tournamentScreen').style.display = 'none';
             document.getElementById('battleScreen').classList.add('active');
             document.getElementById('resultsScreen').classList.remove('active');
         }
         
-        // ============ WEB SPEECH API (распознавание речи) ============
+        // ============ WEB SPEECH API (работает!) ============
         function startWebSpeech() {
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                showToast("❌ Ваш браузер не поддерживает голосовой ввод", 'error');
-                return false;
-            }
-            
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.lang = 'ru-RU';
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            
-            finalTranscript = '';
-            
-            recognition.onresult = (event) => {
-                let interimTranscript = '';
+            return new Promise((resolve, reject) => {
+                // Проверяем поддержку
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    reject(new Error("Web Speech API не поддерживается"));
+                    return;
+                }
                 
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) {
-                        finalTranscript += transcript + ' ';
-                    } else {
-                        interimTranscript += transcript;
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.lang = 'ru-RU';
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.maxAlternatives = 1;
+                
+                finalTranscript = '';
+                
+                recognition.onstart = () => {
+                    console.log("🎙️ Распознавание началось");
+                    document.getElementById('recognitionStatus').innerHTML = '🎙️ Слушаем... Говорите';
+                    resolve(true);
+                };
+                
+                recognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript + ' ';
+                            console.log("✅ Финальный текст:", finalTranscript);
+                        } else {
+                            interimTranscript += transcript;
+                        }
                     }
-                }
-                
-                const textarea = document.getElementById(`poet${currentPoet}Text`);
-                if (textarea) {
-                    textarea.value = finalTranscript + interimTranscript;
-                    // Автосохранение текста
-                    if (currentPoet === 1) tournament[currentBattleId].p1Text = textarea.value;
-                    else tournament[currentBattleId].p2Text = textarea.value;
-                    saveTournament();
-                }
-                
-                // Показываем статус распознавания
-                const hint = document.getElementById('micHint');
-                if (interimTranscript) {
-                    hint.innerHTML = `🎙️ ${interimTranscript.substring(0, 40)}...`;
-                }
-            };
-            
-            recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-                showToast(`Ошибка распознавания: ${event.error}`, 'error');
-                stopRecording();
-            };
-            
-            recognition.onend = () => {
-                if (isRecording) {
-                    // Если запись ещё активна, продолжаем распознавание
-                    recognition.start();
-                } else {
-                    // Запись закончена
-                    document.getElementById('micBtn').classList.remove('recording');
+                    
                     const textarea = document.getElementById(`poet${currentPoet}Text`);
-                    if (textarea && finalTranscript.length < 10) {
-                        showToast("⚠️ Речь не распознана. Введите текст вручную.", 'warning');
-                    } else if (textarea && finalTranscript.length >= 10) {
-                        showToast(`✅ Текст распознан (${finalTranscript.length} симв.)`, 'success');
+                    if (textarea) {
+                        textarea.value = finalTranscript + interimTranscript;
+                        // Сохраняем текст
+                        if (currentPoet === 1) tournament[currentBattleId].p1Text = textarea.value;
+                        else tournament[currentBattleId].p2Text = textarea.value;
+                        saveTournament();
                     }
-                }
-            };
-            
-            recognition.start();
-            return true;
+                    
+                    // Обновляем статус
+                    if (interimTranscript) {
+                        document.getElementById('recognitionStatus').innerHTML = `🎙️ ${interimTranscript.substring(0, 40)}...`;
+                    } else if (finalTranscript) {
+                        document.getElementById('recognitionStatus').innerHTML = `✅ Распознано: ${finalTranscript.length} симв.`;
+                    }
+                };
+                
+                recognition.onerror = (event) => {
+                    console.error("Ошибка распознавания:", event.error);
+                    document.getElementById('recognitionStatus').innerHTML = `⚠️ Ошибка: ${event.error}`;
+                    reject(new Error(event.error));
+                };
+                
+                recognition.onend = () => {
+                    console.log("🎙️ Распознавание остановлено");
+                    if (isRecording) {
+                        // Если запись ещё активна, перезапускаем
+                        try {
+                            recognition.start();
+                        } catch(e) {
+                            console.log("Не удалось перезапустить");
+                        }
+                    }
+                };
+                
+                recognition.start();
+            });
         }
         
         function stopWebSpeech() {
             if (recognition) {
-                recognition.stop();
+                try {
+                    recognition.stop();
+                } catch(e) {}
                 recognition = null;
             }
         }
         
-        // ============ ЗАПИСЬ АУДИО ДЛЯ СКАЧИВАНИЯ ============
+        // ============ ЗАПИСЬ АУДИО ============
         async function startAudioRecording() {
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -676,16 +683,19 @@
             isRecording = true;
             startTimer();
             document.getElementById('micBtn').classList.add('recording');
-            document.getElementById('micHint').innerHTML = "🎙️ ГОВОРИТЕ... Нажмите для остановки";
+            document.getElementById('micHint').innerHTML = "🔴 ЗАПИСЬ... Нажмите для остановки";
             
-            // Запускаем Web Speech для распознавания
-            const speechStarted = startWebSpeech();
-            
-            // Запускаем запись аудио для скачивания
-            if (speechStarted) {
+            // Запускаем Web Speech
+            try {
+                await startWebSpeech();
                 await startAudioRecording();
-            } else {
-                stopRecording();
+            } catch(err) {
+                console.error("Ошибка запуска:", err);
+                showToast("⚠️ Не удалось запустить распознавание речи", 'warning');
+                isRecording = false;
+                stopTimer();
+                document.getElementById('micBtn').classList.remove('recording');
+                document.getElementById('micHint').innerHTML = "🎤 Нажмите для записи (проверьте микрофон)";
             }
         }
         
@@ -694,11 +704,7 @@
             
             isRecording = false;
             stopTimer();
-            
-            // Останавливаем Web Speech
             stopWebSpeech();
-            
-            // Останавливаем запись аудио
             stopAudioRecording();
             
             document.getElementById('micBtn').classList.remove('recording');
@@ -712,12 +718,14 @@
                 document.getElementById('poet1Time').innerText = timeDisplay;
                 currentPoet = 2;
                 document.getElementById('micHint').innerHTML = "🎤 Нажмите для записи Поэта 2";
+                document.getElementById('recognitionStatus').innerHTML = '';
                 showToast("✅ Поэт 1 записан. Теперь запишите Поэта 2", 'success');
             } else {
                 battle.p2Time = timeDisplay;
                 document.getElementById('poet2Time').innerText = timeDisplay;
                 currentPoet = 1;
                 document.getElementById('micHint').innerHTML = "🎤 Нажмите для записи";
+                document.getElementById('recognitionStatus').innerHTML = '';
                 showToast("✅ Оба поэта записаны! Нажмите 'ОТПРАВИТЬ НА ОЦЕНКУ'", 'success');
             }
             
@@ -726,7 +734,6 @@
             document.getElementById('timer').innerText = "00:00";
         }
         
-        // ============ ТАЙМЕР ============
         function startTimer() {
             recordingSeconds = 0;
             document.getElementById('timer').innerText = "00:00";
@@ -747,7 +754,7 @@
             }
         }
         
-        // ============ АУДИО ФУНКЦИИ ============
+        // АУДИО ФУНКЦИИ
         function downloadAudio(poetNum) {
             if (audioBlobs[poetNum]) {
                 const url = URL.createObjectURL(audioBlobs[poetNum]);
@@ -771,7 +778,7 @@
             }
         }
         
-        // ============ ОТПРАВКА НА ОЦЕНКУ ============
+        // ОТПРАВКА НА ОЦЕНКУ
         async function submitBattle() {
             const battle = tournament[currentBattleId];
             const p1Text = document.getElementById('poet1Text').value.trim();
@@ -811,7 +818,6 @@
                 });
                 
                 const result = await response.json();
-                console.log('Battle result:', result);
                 
                 if (result.status === "success") {
                     battle.p1Content = parseFloat(result.p1Content) || 0;
@@ -849,7 +855,6 @@
             }
         }
         
-        // ============ ПОКАЗ РЕЗУЛЬТАТОВ ============
         function showResults(battle) {
             const container = document.getElementById('resultsContent');
             document.getElementById('resultsTitle').innerHTML = `Батл ${battle.id + 1}: ${escapeHtml(battle.p1Name)} VS ${escapeHtml(battle.p2Name)}`;
@@ -899,7 +904,6 @@
             document.getElementById('resultsScreen').classList.add('active');
         }
         
-        // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
         function backToTournament() {
             document.getElementById('resultsScreen').classList.remove('active');
             document.getElementById('tournamentScreen').style.display = 'block';
@@ -925,6 +929,14 @@
         }
         
         function checkMicrophone() {
+            // Проверяем Web Speech API
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                showToast("✅ Web Speech API поддерживается", 'success');
+            } else {
+                showToast("❌ Web Speech API НЕ поддерживается", 'error');
+            }
+            
+            // Проверяем микрофон
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 navigator.mediaDevices.getUserMedia({ audio: true })
                     .then(stream => {
@@ -936,13 +948,6 @@
                     });
             } else {
                 showToast("❌ Ваш браузер не поддерживает микрофон", 'error');
-            }
-            
-            // Проверяем поддержку Web Speech API
-            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                showToast("✅ Голосовой ввод поддерживается", 'success');
-            } else {
-                showToast("⚠️ Голосовой ввод не поддерживается", 'warning');
             }
         }
         
@@ -966,7 +971,7 @@
             });
         }
         
-        // ============ АВТОСОХРАНЕНИЕ ТЕКСТА ============
+        // АВТОСОХРАНЕНИЕ
         document.getElementById('poet1Text')?.addEventListener('input', function() {
             if (tournament[currentBattleId]) {
                 tournament[currentBattleId].p1Text = this.value;
@@ -997,7 +1002,7 @@
             }
         });
         
-        // ============ ЗАПУСК ============
+        // ЗАПУСК
         initTournament();
         document.getElementById('micBtn').onclick = () => {
             if (isRecording) {
@@ -1009,5 +1014,4 @@
         document.getElementById('submitBtn').onclick = submitBattle;
     </script>
 </body>
-</html>
 </html>
