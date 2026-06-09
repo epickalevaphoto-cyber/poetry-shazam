@@ -2,12 +2,24 @@ const express = require('express');
 const path = require('path');
 const multer = require('multer');
 const FormData = require('form-data');
+const fs = require('fs');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+  storage: multer.diskStorage({
+    destination: './uploads/',
+    filename: (req, file, cb) => {
+      cb(null, `audio_${Date.now()}_${req.body.poetNum}.webm`);
+    }
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
+
+// Создаём папку для загрузок
+if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
 
 const YANDEX_API_KEY = process.env.YANDEX_API_KEY || "";
 const YANDEX_FOLDER_ID = process.env.YANDEX_FOLDER_ID || "";
@@ -38,7 +50,7 @@ app.post('/api/battle', async (req, res) => {
   }
 });
 
-// ИСПРАВЛЕННОЕ РАСПОЗНАВАНИЕ
+// ИСПРАВЛЕННОЕ РАСПОЗНАВАНИЕ - ВЕРСИЯ 2
 app.post('/api/recognize', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
@@ -46,9 +58,14 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
     }
     
     const poetNum = req.body.poetNum;
-    console.log(`🎤 Распознавание аудио Поэта ${poetNum}, размер: ${req.file.size} bytes`);
+    const audioPath = req.file.path;
+    const fileSizeKB = (req.file.size / 1024).toFixed(2);
     
+    console.log(`🎤 Распознавание Поэта ${poetNum}, файл: ${audioPath}, размер: ${fileSizeKB} KB`);
+    
+    // Проверяем настройки
     if (!YANDEX_API_KEY || !YANDEX_FOLDER_ID) {
+      console.log("⚠️ SpeechKit не настроен");
       return res.json({ 
         success: true, 
         text: "⚠️ SpeechKit не настроен. Введите текст вручную.",
@@ -56,53 +73,53 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
       });
     }
     
-    // Используем FormData для отправки аудио (проще и надёжнее)
-    const formData = new FormData();
-    formData.append('audio', req.file.buffer, {
-      filename: 'audio.webm',
-      contentType: 'audio/webm'
-    });
-    formData.append('config', JSON.stringify({
-      specification: {
-        languageCode: 'ru-RU',
-        model: 'general',
-        audioEncoding: 'WEBM_OPUS',
-        sampleRateHertz: 48000
-      }
-    }));
+    // ВАЖНО: SpeechKit ожидает raw audio данные, а не multipart/form-data
+    // Используем простой POST с audio/webm в теле
     
-    // Правильный URL для распознавания (синхронный, до 30 сек)
-    const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId=${YANDEX_FOLDER_ID}`;
+    const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId=${YANDEX_FOLDER_ID}&lang=ru-RU&topic=general`;
     
-    console.log(`🎤 Отправка запроса в SpeechKit...`);
+    console.log(`🎤 Отправляем ${fileSizeKB}KB в SpeechKit...`);
+    
+    // Читаем файл как Buffer
+    const audioBuffer = fs.readFileSync(audioPath);
     
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Api-Key ${YANDEX_API_KEY}`
+        'Authorization': `Api-Key ${YANDEX_API_KEY}`,
+        'Content-Type': 'audio/webm'
       },
-      body: formData
+      body: audioBuffer
     });
     
-    console.log(`🎤 Статус ответа: ${response.status}`);
-    
-    const resultText = await response.text();
-    console.log(`🎤 Ответ: ${resultText.substring(0, 200)}`);
+    const responseText = await response.text();
+    console.log(`🎤 Ответ SpeechKit (${response.status}): ${responseText.substring(0, 300)}`);
     
     if (response.status === 200) {
       // Успешное распознавание
-      res.json({ success: true, text: resultText, poetNum: poetNum });
+      const recognizedText = responseText.trim();
+      if (recognizedText && recognizedText.length > 0) {
+        console.log(`✅ Распознано ${recognizedText.length} символов`);
+        res.json({ success: true, text: recognizedText, poetNum: poetNum });
+      } else {
+        console.log(`⚠️ Пустой результат для файла ${fileSizeKB}KB`);
+        // Попробуем альтернативный метод с указанием кодека
+        await tryAlternativeRecognition(audioBuffer, poetNum, res);
+      }
     } else {
-      // Ошибка
-      res.json({ 
-        success: true, 
-        text: `⚠️ Распознавание не удалось (код ${response.status}). Введите текст вручную.`,
-        poetNum: poetNum 
-      });
+      console.log(`❌ Ошибка SpeechKit: ${response.status}`);
+      // Пробуем альтернативный метод
+      await tryAlternativeRecognition(audioBuffer, poetNum, res);
     }
+    
+    // Удаляем временный файл
+    fs.unlinkSync(audioPath);
     
   } catch (error) {
     console.error("SpeechKit error:", error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
     res.json({ 
       success: true, 
       text: `⚠️ Ошибка: ${error.message}. Введите текст вручную.`,
@@ -111,8 +128,52 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
   }
 });
 
+// Альтернативный метод с явным указанием параметров
+async function tryAlternativeRecognition(audioBuffer, poetNum, res) {
+  console.log("🔄 Пробуем альтернативный метод распознавания...");
+  
+  try {
+    const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize`;
+    const params = new URLSearchParams({
+      folderId: YANDEX_FOLDER_ID,
+      lang: 'ru-RU',
+      topic: 'general',
+      format: 'webm'
+    });
+    
+    const response = await fetch(`${url}?${params}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Api-Key ${YANDEX_API_KEY}`,
+        'Content-Type': 'audio/webm;codecs=opus'
+      },
+      body: audioBuffer
+    });
+    
+    const text = await response.text();
+    console.log(`🔄 Альтернативный ответ: ${text.substring(0, 200)}`);
+    
+    if (response.status === 200 && text && text.length > 0) {
+      res.json({ success: true, text: text, poetNum: poetNum });
+    } else {
+      res.json({ 
+        success: true, 
+        text: `⚠️ Распознавание не удалось (${response.status}). Введите текст вручную.`,
+        poetNum: poetNum 
+      });
+    }
+  } catch (err) {
+    res.json({ 
+      success: true, 
+      text: `⚠️ Ошибка распознавания. Введите текст вручную.`,
+      poetNum: poetNum 
+    });
+  }
+}
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Сервер запущен на порту ${PORT}`);
   console.log(`✅ SpeechKit: ${YANDEX_API_KEY && YANDEX_FOLDER_ID ? 'НАСТРОЕН' : 'НЕ НАСТРОЕН'}`);
+  console.log(`📁 Uploads directory: ${fs.existsSync('./uploads') ? 'OK' : 'created'}`);
 });
