@@ -25,7 +25,7 @@ app.get('/api/health', (req, res) => {
 
 // Прокси для YandexGPT
 app.post('/api/battle', async (req, res) => {
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbwL7XqW2dgveG5oWLil2cgiyQELKmqEcC0GurcN1SxwYr4CqP7VVGIm1jj0rOVtQImq/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbwPsFkUqSFwYoKLTbLyR86jJALN78mpntqOseYDgZwPWLv6bMFJvh2LxlffcoNyGD9Ung/exec";
   try {
     const response = await fetch(GAS_URL, {
       method: 'POST',
