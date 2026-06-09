@@ -367,7 +367,7 @@
                         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
                     </svg>
                 </div>
-                <div class="mic-hint" id="recording-hint">Нажмите для записи</div>
+                <div class="mic-hint" id="recording-hint">🎤 Нажмите для записи (после остановки текст появится через 5-15 сек)</div>
                 <div id="timer-display" class="timer-display">00:00</div>
             </div>
 
@@ -396,15 +396,13 @@
         let currentRecordingPoet = 1;
         let recordingTimer = null;
         let recordingSeconds = 0;
-        let recognition = null;
-        let currentTranscript = "";
-        let isRecording = false;
-        let lastRecognizedText = "";
         
+        // MediaRecorder (только аудио, без Web Speech API)
         let mediaRecorder = null;
         let audioChunks = [];
         let audioBlobs = { 1: null, 2: null };
         let audioUrls = { 1: null, 2: null };
+        let isRecording = false;
 
         const tournamentBattles = {};
         for (let i = 1; i <= 10; i++) {
@@ -439,45 +437,12 @@
             };
             for (let i = 1; i <= 10; i++) {
                 const b = tournamentBattles[i];
-                dataToSave.tournamentBattles[i] = { ...b, p1Audio: null, p2Audio: null };
+                dataToSave.tournamentBattles[i] = { ...b };
             }
             localStorage.setItem('poetryShazamTournament', JSON.stringify(dataToSave));
         }
 
-        function initSpeechRecognition() {
-            if (!('webkitSpeechRecognition' in window)) {
-                alert("❌ Ваш браузер не поддерживает распознавание речи. Используйте Chrome.");
-                return false;
-            }
-            recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'ru-RU';
-            
-            recognition.onresult = (event) => {
-                let interim = "", final = "";
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    if (event.results[i].isFinal) final += event.results[i][0].transcript + " ";
-                    else interim += event.results[i][0].transcript;
-                }
-                lastRecognizedText += final;
-                currentTranscript = lastRecognizedText + interim;
-                
-                const poemField = currentRecordingPoet === 1 ? document.getElementById(`poem1-editable`) : document.getElementById(`poem2-editable`);
-                if (poemField) poemField.value = currentTranscript;
-            };
-            
-            recognition.onerror = (event) => {
-                if (event.error === 'no-speech') return;
-                console.log("Recognition error:", event.error);
-            };
-            
-            recognition.onend = () => { 
-                if(isRecording) setTimeout(() => recognition.start(), 200);
-            };
-            return true;
-        }
-
+        // Аудиозапись
         async function startAudioRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -490,7 +455,7 @@
                     }
                 };
                 
-                mediaRecorder.onstop = () => {
+                mediaRecorder.onstop = async () => {
                     console.log("Создание аудио blob, chunks:", audioChunks.length);
                     const blob = new Blob(audioChunks, { type: 'audio/webm' });
                     audioBlobs[currentRecordingPoet] = blob;
@@ -501,6 +466,21 @@
                     if (controlDiv) controlDiv.style.display = 'flex';
                     
                     stream.getTracks().forEach(track => track.stop());
+                    
+                    // АВТОМАТИЧЕСКОЕ РАСПОЗНАВАНИЕ
+                    showToast(`🎤 Распознавание аудио... (до 20 секунд)`);
+                    const recognizedText = await recognizeAudio(blob, currentRecordingPoet);
+                    
+                    const battle = tournamentBattles[currentBattleId];
+                    if (currentRecordingPoet === 1) {
+                        battle.p1Text = recognizedText;
+                        document.getElementById('poem1-editable').value = recognizedText;
+                    } else {
+                        battle.p2Text = recognizedText;
+                        document.getElementById('poem2-editable').value = recognizedText;
+                    }
+                    saveTournamentData();
+                    showToast(`✅ Текст распознан (${recognizedText.length} симв.)`);
                 };
                 
                 mediaRecorder.start(1000);
@@ -518,66 +498,56 @@
             }
         }
 
+        // Распознавание аудио через сервер
+        async function recognizeAudio(blob, poetNum) {
+            try {
+                const formData = new FormData();
+                formData.append('audio', blob, `poet${poetNum}.webm`);
+                formData.append('poetNum', poetNum);
+                
+                const response = await fetch('/api/recognize', { method: 'POST', body: formData });
+                const result = await response.json();
+                
+                if (result.success && result.text) {
+                    return result.text;
+                } else {
+                    throw new Error(result.error || "Ошибка распознавания");
+                }
+            } catch(err) {
+                console.error("Распознавание ошибка:", err);
+                return "⚠️ Распознавание не удалось. Введите текст вручную.";
+            }
+        }
+
         async function startContinuousRecording() {
-            if (!recognition && !initSpeechRecognition()) return false;
-            
             isRecording = true;
-            lastRecognizedText = "";
-            currentTranscript = "";
-            
-            const poemField = currentRecordingPoet === 1 ? document.getElementById(`poem1-editable`) : document.getElementById(`poem2-editable`);
-            if (poemField) poemField.value = "";
-            
             const audioStarted = await startAudioRecording();
             if (!audioStarted) {
                 isRecording = false;
                 return false;
             }
-            
-            try { 
-                recognition.start(); 
-                startTimer(); 
-                return true;
-            } catch(e) { 
-                console.error("Ошибка распознавания:", e);
-                return false; 
-            }
+            startTimer();
+            return true;
         }
 
         async function stopContinuousRecording() {
             console.log("Остановка записи...");
             isRecording = false;
-            
-            if (recognition) {
-                try { recognition.stop(); } catch(e) {}
-            }
-            
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-            }
-            
+            stopAudioRecording();
             const seconds = stopTimer();
             document.getElementById('record-trigger').classList.remove('recording');
             
-            await new Promise(r => setTimeout(r, 500));
-            
             const battle = tournamentBattles[currentBattleId];
-            const finalText = currentTranscript.trim();
-            
             if (currentRecordingPoet === 1) {
-                battle.p1Text = finalText;
                 battle.p1Time = formatTime(seconds);
                 document.getElementById(`poet1-time`).innerText = formatTime(seconds);
             } else {
-                battle.p2Text = finalText;
                 battle.p2Time = formatTime(seconds);
                 document.getElementById(`poet2-time`).innerText = formatTime(seconds);
             }
-            
             saveTournamentData();
-            showToast(`✅ Текст сохранён (${finalText.length} симв.)`);
             
-            return { transcript: finalText, seconds: seconds };
+            return { seconds: seconds };
         }
 
         function startTimer() {
@@ -625,41 +595,6 @@
                 showToast(`📥 Аудио скачано`);
             } else {
                 alert("Нет аудиозаписи");
-            }
-        }
-
-        async function reRecognizeAudio(poetNum) {
-            if (!audioBlobs[poetNum]) {
-                alert("Нет аудио для распознавания");
-                return;
-            }
-            showLoading(true);
-            try {
-                const formData = new FormData();
-                formData.append('audio', audioBlobs[poetNum], `poet${poetNum}.webm`);
-                formData.append('poetNum', poetNum);
-                
-                const response = await fetch('/api/recognize', { method: 'POST', body: formData });
-                const result = await response.json();
-                
-                if (result.success) {
-                    const battle = tournamentBattles[currentBattleId];
-                    if (poetNum === 1) {
-                        battle.p1Text = result.text;
-                        document.getElementById('poem1-editable').value = result.text;
-                    } else {
-                        battle.p2Text = result.text;
-                        document.getElementById('poem2-editable').value = result.text;
-                    }
-                    saveTournamentData();
-                    showToast(`✅ Текст обновлён`);
-                } else {
-                    throw new Error(result.error || "Ошибка");
-                }
-            } catch(err) {
-                alert("❌ Ошибка распознавания: " + err.message);
-            } finally {
-                showLoading(false);
             }
         }
 
@@ -801,11 +736,10 @@
                         <input type="text" id="poet1-name" class="poet-name-input" value="${battle.p1Name}" placeholder="Имя Поэта 1">
                         <span class="poet-time" id="poet1-time">${battle.p1Time || '00:00'}</span>
                     </div>
-                    <textarea id="poem1-editable" class="poem-textarea" placeholder="Введите текст стиха вручную или используйте микрофон">${battle.p1Text || ''}</textarea>
+                    <textarea id="poem1-editable" class="poem-textarea" placeholder="Текст появится автоматически через 5-15 секунд после записи">${battle.p1Text || ''}</textarea>
                     <div class="icon-group">
                         <button class="icon-action gold" onclick="forceSavePoem(1)" title="Сохранить текст">💾</button>
                         <button class="icon-action gold" onclick="downloadAudio(1)" title="Скачать аудио">📥</button>
-                        <button class="icon-action gold" onclick="reRecognizeAudio(1)" title="Перераспознать аудио">🎤</button>
                     </div>
                     <div id="audio1-control" class="audio-control" style="display:${audioBlobs[1] ? 'flex' : 'none'}">
                         <button class="play-btn" onclick="playAudio(1)">🔊 Прослушать</button>
@@ -816,11 +750,10 @@
                         <input type="text" id="poet2-name" class="poet-name-input" value="${battle.p2Name}" placeholder="Имя Поэта 2">
                         <span class="poet-time" id="poet2-time">${battle.p2Time || '00:00'}</span>
                     </div>
-                    <textarea id="poem2-editable" class="poem-textarea" placeholder="Введите текст стиха вручную или используйте микрофон">${battle.p2Text || ''}</textarea>
+                    <textarea id="poem2-editable" class="poem-textarea" placeholder="Текст появится автоматически через 5-15 секунд после записи">${battle.p2Text || ''}</textarea>
                     <div class="icon-group">
                         <button class="icon-action purple" onclick="forceSavePoem(2)" title="Сохранить текст">💾</button>
                         <button class="icon-action purple" onclick="downloadAudio(2)" title="Скачать аудио">📥</button>
-                        <button class="icon-action purple" onclick="reRecognizeAudio(2)" title="Перераспознать аудио">🎤</button>
                     </div>
                     <div id="audio2-control" class="audio-control" style="display:${audioBlobs[2] ? 'flex' : 'none'}">
                         <button class="play-btn" onclick="playAudio(2)">🔊 Прослушать</button>
@@ -874,7 +807,6 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadTournamentData();
-            initSpeechRecognition();
             document.getElementById('submit-battle-btn').addEventListener('click', submitBattle);
             
             const recordBtn = document.getElementById('record-trigger');
@@ -911,4 +843,4 @@
         });
     </script>
 </body>
-    </html>
+</html>
