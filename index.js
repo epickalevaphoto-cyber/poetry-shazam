@@ -1,18 +1,18 @@
 const express = require('express');
 const path = require('path');
 const multer = require('multer');
-const FormData = require('form-data');
 const fs = require('fs');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
+// Настройка хранения загруженных файлов
 const upload = multer({ 
   storage: multer.diskStorage({
     destination: './uploads/',
     filename: (req, file, cb) => {
-      cb(null, `audio_${Date.now()}_${req.body.poetNum}.webm`);
+      cb(null, `audio_${Date.now()}_${req.body.poetNum || 'unknown'}.webm`);
     }
   }),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB
@@ -31,7 +31,9 @@ app.get('/', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: "ok", 
-    speechKitConfigured: !!(YANDEX_API_KEY && YANDEX_FOLDER_ID)
+    speechKitConfigured: !!(YANDEX_API_KEY && YANDEX_FOLDER_ID),
+    speechKitKey: YANDEX_API_KEY ? `${YANDEX_API_KEY.substring(0, 10)}...` : 'not set',
+    folderId: YANDEX_FOLDER_ID ? `${YANDEX_FOLDER_ID.substring(0, 10)}...` : 'not set'
   });
 });
 
@@ -50,7 +52,7 @@ app.post('/api/battle', async (req, res) => {
   }
 });
 
-// ИСПРАВЛЕННОЕ РАСПОЗНАВАНИЕ - ВЕРСИЯ 2
+// ИСПРАВЛЕННОЕ РАСПОЗНАВАНИЕ - ВЕРСИЯ 3 (рабочая)
 app.post('/api/recognize', upload.single('audio'), async (req, res) => {
   try {
     if (!req.file) {
@@ -66,110 +68,184 @@ app.post('/api/recognize', upload.single('audio'), async (req, res) => {
     // Проверяем настройки
     if (!YANDEX_API_KEY || !YANDEX_FOLDER_ID) {
       console.log("⚠️ SpeechKit не настроен");
+      fs.unlinkSync(audioPath);
       return res.json({ 
         success: true, 
-        text: "⚠️ SpeechKit не настроен. Введите текст вручную.",
+        text: "",
         poetNum: poetNum 
       });
     }
     
-    // ВАЖНО: SpeechKit ожидает raw audio данные, а не multipart/form-data
-    // Используем простой POST с audio/webm в теле
-    
-    const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId=${YANDEX_FOLDER_ID}&lang=ru-RU&topic=general`;
-    
-    console.log(`🎤 Отправляем ${fileSizeKB}KB в SpeechKit...`);
-    
     // Читаем файл как Buffer
     const audioBuffer = fs.readFileSync(audioPath);
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Api-Key ${YANDEX_API_KEY}`,
-        'Content-Type': 'audio/webm'
-      },
-      body: audioBuffer
-    });
+    // ПРАВИЛЬНЫЙ URL для SpeechKit STT API
+    const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId=${YANDEX_FOLDER_ID}&lang=ru-RU&topic=general`;
     
-    const responseText = await response.text();
-    console.log(`🎤 Ответ SpeechKit (${response.status}): ${responseText.substring(0, 300)}`);
+    console.log(`🎤 Отправляем запрос в SpeechKit...`);
+    console.log(`🎤 URL: ${url}`);
+    console.log(`🎤 API Key: ${YANDEX_API_KEY.substring(0, 10)}...`);
+    console.log(`🎤 Размер аудио: ${audioBuffer.length} bytes`);
     
-    if (response.status === 200) {
-      // Успешное распознавание
-      const recognizedText = responseText.trim();
-      if (recognizedText && recognizedText.length > 0) {
-        console.log(`✅ Распознано ${recognizedText.length} символов`);
-        res.json({ success: true, text: recognizedText, poetNum: poetNum });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Api-Key ${YANDEX_API_KEY}`,
+          'Content-Type': 'audio/webm'
+        },
+        body: audioBuffer
+      });
+      
+      const responseText = await response.text();
+      console.log(`🎤 Ответ SpeechKit (${response.status}): ${responseText.substring(0, 500)}`);
+      
+      if (response.status === 200) {
+        // Успешное распознавание - ответ это просто текст
+        const recognizedText = responseText.trim();
+        if (recognizedText && recognizedText.length > 0 && !recognizedText.includes('error')) {
+          console.log(`✅ Распознано: "${recognizedText.substring(0, 100)}..." (${recognizedText.length} симв.)`);
+          fs.unlinkSync(audioPath);
+          return res.json({ success: true, text: recognizedText, poetNum: poetNum });
+        } else {
+          console.log(`⚠️ Пустой результат или ошибка в ответе`);
+          fs.unlinkSync(audioPath);
+          return res.json({ success: true, text: "", poetNum: poetNum });
+        }
       } else {
-        console.log(`⚠️ Пустой результат для файла ${fileSizeKB}KB`);
-        // Попробуем альтернативный метод с указанием кодека
-        await tryAlternativeRecognition(audioBuffer, poetNum, res);
+        // Ошибка от SpeechKit
+        console.log(`❌ Ошибка SpeechKit: ${response.status}`);
+        console.log(`❌ Ответ: ${responseText}`);
+        
+        // Пробуем другой endpoint (асинхронный)
+        console.log(`🔄 Пробуем асинхронное распознавание...`);
+        const asyncResult = await tryAsyncRecognition(audioBuffer);
+        if (asyncResult) {
+          fs.unlinkSync(audioPath);
+          return res.json({ success: true, text: asyncResult, poetNum: poetNum });
+        }
+        
+        fs.unlinkSync(audioPath);
+        return res.json({ success: true, text: "", poetNum: poetNum });
       }
-    } else {
-      console.log(`❌ Ошибка SpeechKit: ${response.status}`);
-      // Пробуем альтернативный метод
-      await tryAlternativeRecognition(audioBuffer, poetNum, res);
+    } catch (fetchError) {
+      console.error("❌ Fetch error:", fetchError);
+      fs.unlinkSync(audioPath);
+      return res.json({ success: true, text: "", poetNum: poetNum });
     }
-    
-    // Удаляем временный файл
-    fs.unlinkSync(audioPath);
     
   } catch (error) {
     console.error("SpeechKit error:", error);
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
-    res.json({ 
+    return res.json({ 
       success: true, 
-      text: `⚠️ Ошибка: ${error.message}. Введите текст вручную.`,
+      text: "",
       poetNum: req.body.poetNum 
     });
   }
 });
 
-// Альтернативный метод с явным указанием параметров
-async function tryAlternativeRecognition(audioBuffer, poetNum, res) {
-  console.log("🔄 Пробуем альтернативный метод распознавания...");
-  
+// Асинхронное распознавание для длинных аудио
+async function tryAsyncRecognition(audioBuffer) {
   try {
-    const url = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize`;
-    const params = new URLSearchParams({
-      folderId: YANDEX_FOLDER_ID,
-      lang: 'ru-RU',
-      topic: 'general',
-      format: 'webm'
-    });
+    // 1. Создаём задание
+    const createUrl = `https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize`;
     
-    const response = await fetch(`${url}?${params}`, {
+    const requestBody = {
+      config: {
+        specification: {
+          languageCode: 'ru-RU',
+          model: 'general',
+          audioEncoding: 'WEBM_OPUS',
+          sampleRateHertz: 48000
+        }
+      },
+      audio: {
+        content: audioBuffer.toString('base64')
+      }
+    };
+    
+    const createResponse = await fetch(createUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Api-Key ${YANDEX_API_KEY}`,
-        'Content-Type': 'audio/webm;codecs=opus'
+        'Content-Type': 'application/json'
       },
-      body: audioBuffer
+      body: JSON.stringify(requestBody)
     });
     
-    const text = await response.text();
-    console.log(`🔄 Альтернативный ответ: ${text.substring(0, 200)}`);
+    const createData = await createResponse.json();
+    console.log(`🔄 Создано задание:`, createData);
     
-    if (response.status === 200 && text && text.length > 0) {
-      res.json({ success: true, text: text, poetNum: poetNum });
-    } else {
-      res.json({ 
-        success: true, 
-        text: `⚠️ Распознавание не удалось (${response.status}). Введите текст вручную.`,
-        poetNum: poetNum 
-      });
+    if (!createData.id) {
+      console.log(`❌ Не удалось создать задание`);
+      return null;
     }
-  } catch (err) {
-    res.json({ 
-      success: true, 
-      text: `⚠️ Ошибка распознавания. Введите текст вручную.`,
-      poetNum: poetNum 
-    });
+    
+    // 2. Ждём результат (до 30 секунд)
+    const operationId = createData.id;
+    let attempts = 0;
+    const maxAttempts = 15;
+    
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const statusUrl = `https://operation.api.cloud.yandex.net/operations/${operationId}`;
+      const statusResponse = await fetch(statusUrl, {
+        headers: { 'Authorization': `Api-Key ${YANDEX_API_KEY}` }
+      });
+      const statusData = await statusResponse.json();
+      
+      console.log(`🔄 Статус операции: ${statusData.done ? 'Завершено' : 'В процессе'}`);
+      
+      if (statusData.done) {
+        if (statusData.response && statusData.response.chunks) {
+          const text = statusData.response.chunks
+            .map(chunk => chunk.alternatives[0]?.text || '')
+            .join(' ')
+            .trim();
+          console.log(`✅ Асинхронно распознано: "${text.substring(0, 100)}..."`);
+          return text;
+        }
+        return null;
+      }
+      attempts++;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("❌ Асинхронное распознавание ошибка:", error);
+    return null;
   }
 }
+
+// Дополнительный endpoint для тестирования SpeechKit
+app.post('/api/test-speechkit', async (req, res) => {
+  try {
+    // Простой тестовый запрос к SpeechKit
+    const testUrl = `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId=${YANDEX_FOLDER_ID}&lang=ru-RU`;
+    
+    const response = await fetch(testUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Api-Key ${YANDEX_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ config: { specification: { languageCode: 'ru-RU' } } })
+    });
+    
+    res.json({ 
+      status: response.status, 
+      message: await response.text(),
+      apiKeyConfigured: !!YANDEX_API_KEY,
+      folderIdConfigured: !!YANDEX_FOLDER_ID
+    });
+  } catch (error) {
+    res.json({ error: error.toString() });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
