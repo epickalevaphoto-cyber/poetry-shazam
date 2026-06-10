@@ -515,30 +515,35 @@
         }
 
         async function stopRecording() {
-            isRecording = false;
-            if (recognition) { try { recognition.stop(); } catch(e) {} }
-            stopAudioRecording();
-            const seconds = stopTimer();
-            document.getElementById('record-trigger').classList.remove('recording');
-            const battle = tournamentBattles[currentBattleId];
-            const finalText = currentTranscript.trim();
-            if (currentRecordingPoet === 1) {
-                battle.p1Time = formatTime(seconds);
-                battle.p1Text = finalText;
-                document.getElementById(`poet1-time`).innerText = formatTime(seconds);
-                const textarea = document.getElementById('poem1-text');
-                if (textarea) textarea.value = finalText;
-            } else {
-                battle.p2Time = formatTime(seconds);
-                battle.p2Text = finalText;
-                document.getElementById(`poet2-time`).innerText = formatTime(seconds);
-                const textarea = document.getElementById('poem2-text');
-                if (textarea) textarea.value = finalText;
-            }
-            saveTournamentData();
-            showToast(`✅ Текст сохранён (${finalText.length} симв.)`);
-            return seconds;
-        }
+    isRecording = false;
+    if (recognition) { try { recognition.stop(); } catch(e) {} }
+    stopAudioRecording();
+    const seconds = stopTimer();
+    document.getElementById('record-trigger').classList.remove('recording');
+    const battle = tournamentBattles[currentBattleId];
+    
+    let finalText = currentTranscript.trim();
+    
+    // ✅ ПРИМЕНЯЕМ ФОРМАТИРОВАНИЕ ТЕКСТА
+    finalText = formatPoemText(finalText);
+    
+    if (currentRecordingPoet === 1) {
+        battle.p1Time = formatTime(seconds);
+        battle.p1Text = finalText;
+        document.getElementById(`poet1-time`).innerText = formatTime(seconds);
+        const textarea = document.getElementById('poem1-text');
+        if (textarea) textarea.value = finalText;
+    } else {
+        battle.p2Time = formatTime(seconds);
+        battle.p2Text = finalText;
+        document.getElementById(`poet2-time`).innerText = formatTime(seconds);
+        const textarea = document.getElementById('poem2-text');
+        if (textarea) textarea.value = finalText;
+    }
+    saveTournamentData();
+    showToast(`✅ Текст отформатирован (${finalText.length} симв.)`);
+    return seconds;
+}
 
         function startTimer() {
             recordingSeconds = 0;
@@ -561,7 +566,61 @@
             let s = sec % 60;
             return `${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
         }
+// Функция для форматирования текста стиха
+function formatPoemText(rawText) {
+    if (!rawText) return "";
+    
+    let text = rawText.replace(/\s+/g, ' ').trim();
+    if (text.length > 0) {
+        text = text.charAt(0).toUpperCase() + text.slice(1);
+    }
+    
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        if ((currentLine + ' ' + word).length < 50) {
+            currentLine += (currentLine ? ' ' : '') + word;
+        } else {
+            if (currentLine) lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    if (currentLine) lines.push(currentLine);
+    
+    const formattedLines = lines.map(line => {
+        const lastChar = line.charAt(line.length - 1);
+        if (!['.', '!', '?', ',', ';', ':'].includes(lastChar)) {
+            return line + '.';
+        }
+        return line;
+    });
+    
+    let formattedText = formattedLines.join('\n');
+    formattedText = formattedText.replace(/ что /g, ', что ');
+    formattedText = formattedText.replace(/ которая /g, ', которая ');
+    formattedText = formattedText.replace(/ который /g, ', который ');
+    formattedText = formattedText.replace(/ где /g, ', где ');
+    formattedText = formattedText.replace(/ когда /g, ', когда ');
+    
+    return formattedText;
+}
 
+// Функция для ручного форматирования текста поэта
+function formatPoem(poetNum) {
+    const textarea = document.getElementById(`poem${poetNum}-text`);
+    if (textarea) {
+        const formatted = formatPoemText(textarea.value);
+        textarea.value = formatted;
+        const battle = tournamentBattles[currentBattleId];
+        if (poetNum === 1) battle.p1Text = formatted;
+        else battle.p2Text = formatted;
+        saveTournamentData();
+        showToast(`✨ Текст отформатирован`);
+    }
+}
         function savePoemText(poetNum) {
             const battle = tournamentBattles[currentBattleId];
             const textarea = document.getElementById(`poem${poetNum}-text`);
@@ -781,8 +840,11 @@ function addPunctuation(text) {
                     </div>
                     <textarea id="poem1-text" class="poem-textarea" placeholder="Текст появится автоматически">${battle.p1Text || ''}</textarea>
                     <div class="button-group">
-                        <button class="small-btn gold" onclick="savePoemText(1)">💾 Сохранить текст</button>
-                        <button class="small-btn gold" onclick="downloadAudio(1)">📥 Скачать аудио</button>
+                      <div class="button-group">
+    <button class="small-btn gold" onclick="savePoemText(1)">💾 Сохранить текст</button>
+    <button class="small-btn gold" onclick="downloadAudio(1)">📥 Скачать аудио</button>
+    <button class="small-btn gold" onclick="formatPoem(1)">✨ Форматировать</button>   // ← ДОБАВИТЬ ЭТУ СТРОКУ
+</div>
                     </div>
                     <div id="audio-control-1" style="display:${audioBlobs[1] ? 'flex' : 'none'}; gap: 8px; margin-top: 8px;">
                         <button class="small-btn gold" onclick="playAudio(1)">🔊 Прослушать</button>
@@ -795,8 +857,11 @@ function addPunctuation(text) {
                     </div>
                     <textarea id="poem2-text" class="poem-textarea" placeholder="Текст появится автоматически">${battle.p2Text || ''}</textarea>
                     <div class="button-group">
-                        <button class="small-btn purple" onclick="savePoemText(2)">💾 Сохранить текст</button>
-                        <button class="small-btn purple" onclick="downloadAudio(2)">📥 Скачать аудио</button>
+                        <div class="button-group">
+    <button class="small-btn purple" onclick="savePoemText(2)">💾 Сохранить текст</button>
+    <button class="small-btn purple" onclick="downloadAudio(2)">📥 Скачать аудио</button>
+    <button class="small-btn purple" onclick="formatPoem(2)">✨ Форматировать</button>   // ← ДОБАВИТЬ ЭТУ СТРОКУ
+</div>
                     </div>
                     <div id="audio-control-2" style="display:${audioBlobs[2] ? 'flex' : 'none'}; gap: 8px; margin-top: 8px;">
                         <button class="small-btn purple" onclick="playAudio(2)">🔊 Прослушать</button>
