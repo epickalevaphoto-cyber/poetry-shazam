@@ -341,11 +341,11 @@
         </div>
 
         <div id="screen-details" class="screen">
-            <div class="back-link" onclick="showScreen('screen-main')">← В главное меню</div>
+            <div class="back-link" onclick="closeDetailsAndNext()">← В главное меню</div>
             <h2 id="details-title" style="font-size: 22px;">Анализ батла</h2>
             <div id="details-subtitle" style="color: #8b8b8b; margin-bottom: 20px;"></div>
             <div id="details-content"></div>
-            <button class="submit-btn" onclick="showScreen('screen-main')" style="margin-top: 20px;">ЗАКРЫТЬ</button>
+            <button class="submit-btn" onclick="closeDetailsAndNext()" style="margin-top: 20px;">СЛЕДУЮЩИЙ БАТЛ</button>
         </div>
     </div>
 
@@ -404,22 +404,30 @@
             localStorage.setItem('poetryShazamTournament', JSON.stringify(dataToSave));
         }
 
-        // Распознавание речи для Яндекс.Браузера
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+
         function initSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            
             if (!SpeechRecognition) {
-                showToast("❌ Распознавание речи не поддерживается");
+                showToast("❌ Распознавание не поддерживается");
                 return false;
             }
-            
+            if (recognition) {
+                try { recognition.stop(); } catch(e) {}
+                recognition = null;
+            }
             recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'ru-RU';
             
             recognition.onstart = () => {
-                console.log("Распознавание началось");
+                console.log("✅ Распознавание началось");
                 showToast("🎤 Слушаю...");
             };
             
@@ -434,30 +442,31 @@
                 }
                 lastRecognizedText += final;
                 currentTranscript = lastRecognizedText + interim;
-                
                 const textarea = currentRecordingPoet === 1 ? document.getElementById('poem1-text') : document.getElementById('poem2-text');
-                if (textarea) {
-                    textarea.value = currentTranscript;
-                }
+                if (textarea) textarea.value = currentTranscript;
             };
             
             recognition.onerror = (event) => {
                 console.error("Recognition error:", event.error);
                 if (event.error === 'not-allowed') {
-                    alert("Разрешите доступ к микрофону в настройках браузера!");
-                }
-                if (isRecording && event.error !== 'no-speech') {
-                    setTimeout(() => { if(isRecording && recognition) recognition.start(); }, 500);
+                    alert("❌ Разрешите доступ к микрофону!");
+                    if (isRecording) {
+                        isRecording = false;
+                        document.getElementById('record-trigger').classList.remove('recording');
+                    }
                 }
             };
             
             recognition.onend = () => {
                 console.log("Распознавание завершено");
                 if (isRecording) {
-                    setTimeout(() => { if(isRecording && recognition) recognition.start(); }, 200);
+                    setTimeout(() => {
+                        if (isRecording && recognition) {
+                            try { recognition.start(); } catch(e) {}
+                        }
+                    }, 300);
                 }
             };
-            
             return true;
         }
 
@@ -490,35 +499,24 @@
         }
 
         async function startRecording() {
-            if (!recognition && !initSpeechRecognition()) {
-                alert("Распознавание речи не поддерживается");
-                return false;
-            }
+            if (!recognition && !initSpeechRecognition()) return false;
             isRecording = true;
             lastRecognizedText = "";
             currentTranscript = "";
             const textarea = currentRecordingPoet === 1 ? document.getElementById('poem1-text') : document.getElementById('poem2-text');
             if (textarea) textarea.value = "";
             const audioStarted = await startAudioRecording();
-            if (!audioStarted) {
-                isRecording = false;
-                return false;
-            }
+            if (!audioStarted) { isRecording = false; return false; }
             try {
                 recognition.start();
                 startTimer();
                 return true;
-            } catch(e) {
-                console.error("Start error:", e);
-                return false;
-            }
+            } catch(e) { return false; }
         }
 
         async function stopRecording() {
             isRecording = false;
-            if (recognition) {
-                try { recognition.stop(); } catch(e) {}
-            }
+            if (recognition) { try { recognition.stop(); } catch(e) {} }
             stopAudioRecording();
             const seconds = stopTimer();
             document.getElementById('record-trigger').classList.remove('recording');
@@ -633,13 +631,6 @@
                     saveTournamentData();
                     renderTournamentGrid();
                     openDetailsScreen(battle);
-                    if(currentBattleId < 10) {
-                        currentBattleId++;
-                        currentRecordingPoet = 1;
-                        saveTournamentData();
-                        goToBattleScreen(currentBattleId);
-                    } else showToast("🏆 Турнир завершен!");
-                    showToast("✅ Батл завершен!");
                 } else throw new Error(result.message);
             } catch(err) { alert("❌ Ошибка: " + err.message); }
             finally { showLoading(false); }
@@ -670,6 +661,23 @@
             showScreen('screen-details');
         }
 
+        function closeDetailsAndNext() {
+            if (currentBattleId < 10) {
+                currentBattleId++;
+                currentRecordingPoet = 1;
+                audioBlobs = { 1: null, 2: null };
+                audioUrls = { 1: null, 2: null };
+                saveTournamentData();
+                renderTournamentGrid();
+                renderPoetCards(tournamentBattles[currentBattleId]);
+                showScreen('screen-battle');
+                showToast(`✅ Батл завершен! Теперь батл №${currentBattleId}`);
+            } else {
+                showToast("🏆 ТУРНИР ЗАВЕРШЕН! Поздравляем! 🏆");
+                showScreen('screen-main');
+            }
+        }
+
         function renderTournamentGrid() {
             const container = document.getElementById('tournament-grid');
             container.innerHTML = '';
@@ -682,7 +690,7 @@
                     let avg2 = ((b.p2Content + b.p2Delivery)/2).toFixed(1);
                     card.innerHTML = `<div class="battle-header"><span>БАТЛ №${b.id}</span><span class="status-badge">✅ Завершен</span></div>
                         <div class="battle-names">${b.p1Name} VS ${b.p2Name}</div>
-                        <div class="battle-scores">${b.p1Content}/${b.p1Delivery} — ${b.p2Content}/${b.p2Delivery}</div>`;
+                        <div class="battle-scores">${avg1} : ${avg2}</div>`;
                     card.onclick = () => openDetailsScreen(b);
                 } else {
                     card.innerHTML = `<div class="battle-header"><span>БАТЛ №${b.id}</span>${i===currentBattleId ? '<span class="status-badge" style="background:#d4af37;color:#000;">⭐ Текущий</span>' : ''}</div>
@@ -710,7 +718,7 @@
                         <input type="text" id="poet1-name" class="poet-name-input" value="${battle.p1Name}">
                         <span class="poet-time" id="poet1-time">${battle.p1Time}</span>
                     </div>
-                    <textarea id="poem1-text" class="poem-textarea" placeholder="Текст появится автоматически во время записи">${battle.p1Text || ''}</textarea>
+                    <textarea id="poem1-text" class="poem-textarea" placeholder="Текст появится автоматически">${battle.p1Text || ''}</textarea>
                     <div class="button-group">
                         <button class="small-btn gold" onclick="savePoemText(1)">💾 Сохранить текст</button>
                         <button class="small-btn gold" onclick="downloadAudio(1)">📥 Скачать аудио</button>
@@ -724,7 +732,7 @@
                         <input type="text" id="poet2-name" class="poet-name-input" value="${battle.p2Name}">
                         <span class="poet-time" id="poet2-time">${battle.p2Time}</span>
                     </div>
-                    <textarea id="poem2-text" class="poem-textarea" placeholder="Текст появится автоматически во время записи">${battle.p2Text || ''}</textarea>
+                    <textarea id="poem2-text" class="poem-textarea" placeholder="Текст появится автоматически">${battle.p2Text || ''}</textarea>
                     <div class="button-group">
                         <button class="small-btn purple" onclick="savePoemText(2)">💾 Сохранить текст</button>
                         <button class="small-btn purple" onclick="downloadAudio(2)">📥 Скачать аудио</button>
@@ -768,16 +776,11 @@
                 saveTournamentData();
                 renderTournamentGrid();
                 showScreen('screen-main');
+                showToast("🔄 Турнир сброшен");
             }
         }
 
         function showLoading(show) { document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none'; }
-        function showToast(msg) {
-            const toast = document.getElementById('toast');
-            toast.textContent = msg;
-            toast.style.display = 'block';
-            setTimeout(() => toast.style.display = 'none', 3000);
-        }
 
         document.addEventListener('DOMContentLoaded', () => {
             loadTournamentData();
