@@ -590,7 +590,68 @@
             if (audioUrls[poetNum]) new Audio(audioUrls[poetNum]).play();
             else alert("Нет аудио");
         }
+// Функция для форматирования текста стиха
+function formatPoemText(rawText) {
+    if (!rawText) return "";
+    
+    // 1. Разбиваем на предложения (по точке, вопросительному и восклицательному знаку)
+    let text = rawText;
+    
+    // 2. Убираем лишние пробелы
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    // 3. Делаем заглавную букву в начале
+    if (text.length > 0) {
+        text = text.charAt(0).toUpperCase() + text.slice(1);
+    }
+    
+    // 4. Разбиваем на строки примерно по 40-60 символов (для читаемости)
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        if ((currentLine + ' ' + word).length < 50) {
+            currentLine += (currentLine ? ' ' : '') + word;
+        } else {
+            if (currentLine) lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    if (currentLine) lines.push(currentLine);
+    
+    // 5. Добавляем точки в конце строк (если нет знака препинания)
+    const formattedLines = lines.map(line => {
+        const lastChar = line.charAt(line.length - 1);
+        if (!['.', '!', '?', ',', ';', ':'].includes(lastChar)) {
+            return line + '.';
+        }
+        return line;
+    });
+    
+    // 6. Объединяем с переносами строк
+    let formattedText = formattedLines.join('\n');
+    
+    // 7. Заменяем "тишине" на "тишине," и т.д. (базовая пунктуация)
+    formattedText = formattedText.replace(/ что /g, ', что ');
+    formattedText = formattedText.replace(/ которая /g, ', которая ');
+    formattedText = formattedText.replace(/ который /g, ', который ');
+    formattedText = formattedText.replace(/ где /g, ', где ');
+    formattedText = formattedText.replace(/ когда /g, ', когда ');
+    
+    return formattedText;
+}
 
+// Функция для добавления пунктуации в конец строк
+function addPunctuation(text) {
+    if (!text) return text;
+    const lastChar = text.charAt(text.length - 1);
+    if (!['.', '!', '?', ',', ';', ':'].includes(lastChar)) {
+        return text + '.';
+    }
+    return text;
+}
         async function submitBattle() {
             const battle = tournamentBattles[currentBattleId];
             battle.p1Text = document.getElementById('poem1-text')?.value || "";
