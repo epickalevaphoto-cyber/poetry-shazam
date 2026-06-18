@@ -584,7 +584,7 @@
         }
 
         async function stopRecording() {
-            console.log("🛑 stopRecording вызвана");
+            console.log("🛑 stopRecording вызвана, poet:", currentRecordingPoet);
             isRecording = false;
             if (recognition) { try { recognition.stop(); } catch(e) {} }
             stopAudioRecording();
@@ -603,29 +603,30 @@
                 }
             }
             
-            // Форматируем текст для оценки (но оставляем исходный в поле)
+            // Форматируем текст для оценки
             let formattedText = finalText;
             if (finalText) {
                 formattedText = formatPoemText(finalText);
                 console.log("📝 Отформатированный текст:", formattedText);
             }
             
+            // ✅ СОХРАНЯЕМ ТОЛЬКО В ТЕКУЩЕГО ПОЭТА
             if (currentRecordingPoet === 1) {
                 battle.p1Time = formatTime(seconds);
                 battle.p1Text = formattedText;
                 document.getElementById(`poet1-time`).innerText = formatTime(seconds);
                 const textarea = document.getElementById('poem1-text');
-                if (textarea) {
-                    textarea.value = finalText;
-                }
-            } else {
+                if (textarea) textarea.value = finalText;
+                console.log("✅ Сохранено в поэта 1, длина:", finalText.length);
+            } else if (currentRecordingPoet === 2) {
                 battle.p2Time = formatTime(seconds);
                 battle.p2Text = formattedText;
                 document.getElementById(`poet2-time`).innerText = formatTime(seconds);
                 const textarea = document.getElementById('poem2-text');
-                if (textarea) {
-                    textarea.value = finalText;
-                }
+                if (textarea) textarea.value = finalText;
+                console.log("✅ Сохранено в поэта 2, длина:", finalText.length);
+            } else {
+                console.error("❌ Ошибка: currentRecordingPoet =", currentRecordingPoet);
             }
             
             saveTournamentData();
