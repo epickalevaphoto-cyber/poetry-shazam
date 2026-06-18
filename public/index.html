@@ -411,44 +411,63 @@
             setTimeout(() => toast.style.display = 'none', 3000);
         }
 
-        // ========== ФОРМАТИРОВАНИЕ ТЕКСТА ==========
+        // ========== УЛУЧШЕННОЕ ФОРМАТИРОВАНИЕ ТЕКСТА ==========
         function formatPoemText(rawText) {
             if (!rawText) return "";
             
             let text = rawText.replace(/\s+/g, ' ').trim();
+            
+            // Делаем заглавную букву в начале
             if (text.length > 0) {
                 text = text.charAt(0).toUpperCase() + text.slice(1);
             }
             
-            const words = text.split(' ');
-            const lines = [];
-            let currentLine = '';
+            // Разбиваем на предложения по точкам, вопросительным и восклицательным знакам
+            // Если их нет, разбиваем по длине строк (примерно 50-60 символов)
+            let sentences = [];
             
-            for (let i = 0; i < words.length; i++) {
-                const word = words[i];
-                if ((currentLine + ' ' + word).length < 50) {
-                    currentLine += (currentLine ? ' ' : '') + word;
-                } else {
-                    if (currentLine) lines.push(currentLine);
-                    currentLine = word;
+            // Проверяем, есть ли знаки препинания
+            if (text.includes('.') || text.includes('!') || text.includes('?')) {
+                // Разбиваем по знакам препинания
+                sentences = text.split(/(?<=[.!?])\s+/);
+            } else {
+                // Если знаков нет, разбиваем на строки по 50 символов
+                const words = text.split(' ');
+                let currentLine = '';
+                for (let i = 0; i < words.length; i++) {
+                    const word = words[i];
+                    if ((currentLine + ' ' + word).length < 50) {
+                        currentLine += (currentLine ? ' ' : '') + word;
+                    } else {
+                        if (currentLine) sentences.push(currentLine);
+                        currentLine = word;
+                    }
                 }
+                if (currentLine) sentences.push(currentLine);
             }
-            if (currentLine) lines.push(currentLine);
             
-            const formattedLines = lines.map(line => {
-                const lastChar = line.charAt(line.length - 1);
-                if (!['.', '!', '?', ',', ';', ':'].includes(lastChar)) {
-                    return line + '.';
+            // Добавляем точки в конце каждого предложения, если их нет
+            let formattedSentences = sentences.map(s => {
+                let trimmed = s.trim();
+                if (trimmed.length === 0) return trimmed;
+                const lastChar = trimmed.charAt(trimmed.length - 1);
+                if (!['.', '!', '?'].includes(lastChar)) {
+                    return trimmed + '.';
                 }
-                return line;
+                return trimmed;
             });
             
-            let formattedText = formattedLines.join('\n');
+            // Объединяем с переносами строк для читаемости
+            let formattedText = formattedSentences.join('\n');
+            
+            // Добавляем запятые где нужно (базовый уровень)
             formattedText = formattedText.replace(/ что /g, ', что ');
-            formattedText = formattedText.replace(/ которая /g, ', которая ');
             formattedText = formattedText.replace(/ который /g, ', который ');
+            formattedText = formattedText.replace(/ которая /g, ', которая ');
             formattedText = formattedText.replace(/ где /g, ', где ');
             formattedText = formattedText.replace(/ когда /g, ', когда ');
+            formattedText = formattedText.replace(/ но /g, ', но ');
+            formattedText = formattedText.replace(/ потому что /g, ', потому что ');
             
             return formattedText;
         }
@@ -576,6 +595,7 @@
         }
 
         async function stopRecording() {
+            console.log("🛑 stopRecording вызвана");
             isRecording = false;
             if (recognition) { try { recognition.stop(); } catch(e) {} }
             stopAudioRecording();
@@ -583,31 +603,47 @@
             document.getElementById('record-trigger').classList.remove('recording');
             const battle = tournamentBattles[currentBattleId];
             
+            console.log("📝 currentTranscript:", currentTranscript);
+            
             let finalText = currentTranscript.trim();
+            
+            // Если текст пустой, пробуем взять из textarea
             if (!finalText) {
                 const textarea = currentRecordingPoet === 1 ? document.getElementById('poem1-text') : document.getElementById('poem2-text');
-                if (textarea) finalText = textarea.value.trim();
+                if (textarea) {
+                    finalText = textarea.value.trim();
+                    console.log("📝 Текст из textarea:", finalText);
+                }
             }
             
+            // Форматируем текст для оценки (но оставляем исходный в поле)
+            let formattedText = finalText;
             if (finalText) {
-                finalText = formatPoemText(finalText);
+                formattedText = formatPoemText(finalText);
+                console.log("📝 Отформатированный текст:", formattedText);
             }
             
             if (currentRecordingPoet === 1) {
                 battle.p1Time = formatTime(seconds);
-                battle.p1Text = finalText;
+                battle.p1Text = formattedText;
                 document.getElementById(`poet1-time`).innerText = formatTime(seconds);
                 const textarea = document.getElementById('poem1-text');
-                if (textarea) textarea.value = finalText;
+                if (textarea) {
+                    textarea.value = finalText; // Показываем исходный текст
+                }
             } else {
                 battle.p2Time = formatTime(seconds);
-                battle.p2Text = finalText;
+                battle.p2Text = formattedText;
                 document.getElementById(`poet2-time`).innerText = formatTime(seconds);
                 const textarea = document.getElementById('poem2-text');
-                if (textarea) textarea.value = finalText;
+                if (textarea) {
+                    textarea.value = finalText; // Показываем исходный текст
+                }
             }
+            
             saveTournamentData();
             showToast(`✅ Текст сохранён (${finalText.length || 0} симв.)`);
+            console.log("🏁 stopRecording завершена");
             return seconds;
         }
 
@@ -638,8 +674,10 @@
             const textarea = document.getElementById(`poem${poetNum}-text`);
             if (textarea) {
                 const text = textarea.value.trim();
-                if (poetNum === 1) battle.p1Text = text;
-                else battle.p2Text = text;
+                // Сохраняем форматированную версию для оценки
+                const formattedText = formatPoemText(text);
+                if (poetNum === 1) battle.p1Text = formattedText;
+                else battle.p2Text = formattedText;
                 saveTournamentData();
                 showToast(`✅ Текст сохранён (${text.length} симв.)`);
             }
@@ -670,11 +708,15 @@
             battle.p1Name = document.getElementById('poet1-name')?.value || battle.p1Name;
             battle.p2Name = document.getElementById('poet2-name')?.value || battle.p2Name;
             
-            if (!battle.p1Text || battle.p1Text.length < 20) {
+            // Форматируем текст перед отправкой
+            battle.p1Text = formatPoemText(battle.p1Text);
+            battle.p2Text = formatPoemText(battle.p2Text);
+            
+            if (!battle.p1Text || battle.p1Text.length < 10) {
                 alert(`⚠️ Текст Поэта 1 слишком короткий (${battle.p1Text?.length || 0} симв.)`);
                 return;
             }
-            if (!battle.p2Text || battle.p2Text.length < 20) {
+            if (!battle.p2Text || battle.p2Text.length < 10) {
                 alert(`⚠️ Текст Поэта 2 слишком короткий (${battle.p2Text?.length || 0} симв.)`);
                 return;
             }
