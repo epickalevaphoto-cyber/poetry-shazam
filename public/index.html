@@ -411,27 +411,19 @@
             setTimeout(() => toast.style.display = 'none', 3000);
         }
 
-        // ========== УЛУЧШЕННОЕ ФОРМАТИРОВАНИЕ ТЕКСТА ==========
+        // ========== ФОРМАТИРОВАНИЕ ТЕКСТА ==========
         function formatPoemText(rawText) {
             if (!rawText) return "";
             
             let text = rawText.replace(/\s+/g, ' ').trim();
-            
-            // Делаем заглавную букву в начале
             if (text.length > 0) {
                 text = text.charAt(0).toUpperCase() + text.slice(1);
             }
             
-            // Разбиваем на предложения по точкам, вопросительным и восклицательным знакам
-            // Если их нет, разбиваем по длине строк (примерно 50-60 символов)
             let sentences = [];
-            
-            // Проверяем, есть ли знаки препинания
             if (text.includes('.') || text.includes('!') || text.includes('?')) {
-                // Разбиваем по знакам препинания
                 sentences = text.split(/(?<=[.!?])\s+/);
             } else {
-                // Если знаков нет, разбиваем на строки по 50 символов
                 const words = text.split(' ');
                 let currentLine = '';
                 for (let i = 0; i < words.length; i++) {
@@ -446,7 +438,6 @@
                 if (currentLine) sentences.push(currentLine);
             }
             
-            // Добавляем точки в конце каждого предложения, если их нет
             let formattedSentences = sentences.map(s => {
                 let trimmed = s.trim();
                 if (trimmed.length === 0) return trimmed;
@@ -457,10 +448,7 @@
                 return trimmed;
             });
             
-            // Объединяем с переносами строк для читаемости
             let formattedText = formattedSentences.join('\n');
-            
-            // Добавляем запятые где нужно (базовый уровень)
             formattedText = formattedText.replace(/ что /g, ', что ');
             formattedText = formattedText.replace(/ который /g, ', который ');
             formattedText = formattedText.replace(/ которая /g, ', которая ');
@@ -518,6 +506,7 @@
                 lastRecognizedText += final;
                 currentTranscript = lastRecognizedText + interim;
                 
+                // ✅ ОБНОВЛЯЕМ ТОЛЬКО ТЕКУЩЕГО ПОЭТА
                 const textarea = currentRecordingPoet === 1 ? document.getElementById('poem1-text') : document.getElementById('poem2-text');
                 if (textarea) {
                     textarea.value = currentTranscript;
@@ -603,8 +592,6 @@
             document.getElementById('record-trigger').classList.remove('recording');
             const battle = tournamentBattles[currentBattleId];
             
-            console.log("📝 currentTranscript:", currentTranscript);
-            
             let finalText = currentTranscript.trim();
             
             // Если текст пустой, пробуем взять из textarea
@@ -629,7 +616,7 @@
                 document.getElementById(`poet1-time`).innerText = formatTime(seconds);
                 const textarea = document.getElementById('poem1-text');
                 if (textarea) {
-                    textarea.value = finalText; // Показываем исходный текст
+                    textarea.value = finalText;
                 }
             } else {
                 battle.p2Time = formatTime(seconds);
@@ -637,7 +624,7 @@
                 document.getElementById(`poet2-time`).innerText = formatTime(seconds);
                 const textarea = document.getElementById('poem2-text');
                 if (textarea) {
-                    textarea.value = finalText; // Показываем исходный текст
+                    textarea.value = finalText;
                 }
             }
             
@@ -674,7 +661,6 @@
             const textarea = document.getElementById(`poem${poetNum}-text`);
             if (textarea) {
                 const text = textarea.value.trim();
-                // Сохраняем форматированную версию для оценки
                 const formattedText = formatPoemText(text);
                 if (poetNum === 1) battle.p1Text = formattedText;
                 else battle.p2Text = formattedText;
@@ -708,7 +694,6 @@
             battle.p1Name = document.getElementById('poet1-name')?.value || battle.p1Name;
             battle.p2Name = document.getElementById('poet2-name')?.value || battle.p2Name;
             
-            // Форматируем текст перед отправкой
             battle.p1Text = formatPoemText(battle.p1Text);
             battle.p2Text = formatPoemText(battle.p2Text);
             
