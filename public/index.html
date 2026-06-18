@@ -594,20 +594,16 @@
             
             let finalText = currentTranscript.trim();
             
-            // Если текст пустой, пробуем взять из textarea
             if (!finalText) {
                 const textarea = currentRecordingPoet === 1 ? document.getElementById('poem1-text') : document.getElementById('poem2-text');
                 if (textarea) {
                     finalText = textarea.value.trim();
-                    console.log("📝 Текст из textarea:", finalText);
                 }
             }
             
-            // Форматируем текст для оценки
             let formattedText = finalText;
             if (finalText) {
                 formattedText = formatPoemText(finalText);
-                console.log("📝 Отформатированный текст:", formattedText);
             }
             
             // ✅ СОХРАНЯЕМ ТОЛЬКО В ТЕКУЩЕГО ПОЭТА
@@ -625,13 +621,10 @@
                 const textarea = document.getElementById('poem2-text');
                 if (textarea) textarea.value = finalText;
                 console.log("✅ Сохранено в поэта 2, длина:", finalText.length);
-            } else {
-                console.error("❌ Ошибка: currentRecordingPoet =", currentRecordingPoet);
             }
             
             saveTournamentData();
             showToast(`✅ Текст сохранён (${finalText.length || 0} симв.)`);
-            console.log("🏁 stopRecording завершена");
             return seconds;
         }
 
@@ -891,23 +884,36 @@
             
             const recordBtn = document.getElementById('record-trigger');
             const hintElem = document.getElementById('recording-hint');
+            let poet1Recorded = false;
+            let poet2Recorded = false;
+            
             recordBtn.addEventListener('click', async () => {
                 const battle = tournamentBattles[currentBattleId];
+                
                 if(!recordBtn.classList.contains('recording')) {
-                    if(currentRecordingPoet === 1) battle.p1Name = document.getElementById('poet1-name').value.trim() || battle.p1Name;
-                    if(currentRecordingPoet === 2) battle.p2Name = document.getElementById('poet2-name').value.trim() || battle.p2Name;
+                    // НАЧАЛО ЗАПИСИ
+                    if (currentRecordingPoet === 1) {
+                        battle.p1Name = document.getElementById('poet1-name').value.trim() || battle.p1Name;
+                    } else {
+                        battle.p2Name = document.getElementById('poet2-name').value.trim() || battle.p2Name;
+                    }
                     recordBtn.classList.add('recording');
                     hintElem.innerHTML = "🔴 ЗАПИСЬ... Нажмите ещё раз для остановки";
                     await startRecording();
                 } else {
+                    // ОСТАНОВКА ЗАПИСИ
                     await stopRecording();
-                    if(currentRecordingPoet === 1) {
+                    
+                    if (currentRecordingPoet === 1) {
+                        poet1Recorded = true;
                         currentRecordingPoet = 2;
                         recordBtn.classList.remove('recording');
                         hintElem.innerHTML = "🎤 Нажмите для записи Поэта 2";
                         saveTournamentData();
                         renderPoetCards(tournamentBattles[currentBattleId]);
-                    } else {
+                        showToast("✅ Текст Поэта 1 сохранён");
+                    } else if (currentRecordingPoet === 2) {
+                        poet2Recorded = true;
                         currentRecordingPoet = 1;
                         recordBtn.classList.remove('recording');
                         hintElem.innerHTML = "🎤 Нажмите для записи";
