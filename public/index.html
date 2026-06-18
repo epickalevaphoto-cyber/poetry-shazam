@@ -411,15 +411,12 @@
             setTimeout(() => toast.style.display = 'none', 3000);
         }
 
-        // ========== ФОРМАТИРОВАНИЕ ТЕКСТА ==========
         function formatPoemText(rawText) {
             if (!rawText) return "";
-            
             let text = rawText.replace(/\s+/g, ' ').trim();
             if (text.length > 0) {
                 text = text.charAt(0).toUpperCase() + text.slice(1);
             }
-            
             let sentences = [];
             if (text.includes('.') || text.includes('!') || text.includes('?')) {
                 sentences = text.split(/(?<=[.!?])\s+/);
@@ -437,7 +434,6 @@
                 }
                 if (currentLine) sentences.push(currentLine);
             }
-            
             let formattedSentences = sentences.map(s => {
                 let trimmed = s.trim();
                 if (trimmed.length === 0) return trimmed;
@@ -447,7 +443,6 @@
                 }
                 return trimmed;
             });
-            
             let formattedText = formattedSentences.join('\n');
             formattedText = formattedText.replace(/ что /g, ', что ');
             formattedText = formattedText.replace(/ который /g, ', который ');
@@ -456,7 +451,6 @@
             formattedText = formattedText.replace(/ когда /g, ', когда ');
             formattedText = formattedText.replace(/ но /g, ', но ');
             formattedText = formattedText.replace(/ потому что /g, ', потому что ');
-            
             return formattedText;
         }
 
@@ -473,7 +467,6 @@
             }
         }
 
-        // ========== РАСПОЗНАВАНИЕ РЕЧИ ==========
         function initSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
@@ -506,7 +499,6 @@
                 lastRecognizedText += final;
                 currentTranscript = lastRecognizedText + interim;
                 
-                // ✅ ОБНОВЛЯЕМ ТОЛЬКО ТЕКУЩЕГО ПОЭТА
                 const textarea = currentRecordingPoet === 1 ? document.getElementById('poem1-text') : document.getElementById('poem2-text');
                 if (textarea) {
                     textarea.value = currentTranscript;
@@ -537,7 +529,6 @@
             return true;
         }
 
-        // ========== АУДИОЗАПИСЬ ==========
         async function startAudioRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -566,7 +557,6 @@
             if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
         }
 
-        // ========== ЗАПИСЬ ==========
         async function startRecording() {
             if (!recognition && !initSpeechRecognition()) return false;
             isRecording = true;
@@ -593,7 +583,6 @@
             const battle = tournamentBattles[currentBattleId];
             
             let finalText = currentTranscript.trim();
-            
             if (!finalText) {
                 const textarea = currentRecordingPoet === 1 ? document.getElementById('poem1-text') : document.getElementById('poem2-text');
                 if (textarea) {
@@ -680,7 +669,6 @@
             else alert("Нет аудио");
         }
 
-        // ========== ОТПРАВКА НА ОЦЕНКУ ==========
         async function submitBattle() {
             const battle = tournamentBattles[currentBattleId];
             battle.p1Text = document.getElementById('poem1-text')?.value || "";
